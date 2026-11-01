@@ -464,6 +464,44 @@ test("the production selector speaks native Anthropic and rereads its key", asyn
   }
 });
 
+test("a JSON Schema is sent as response_format, and an endpoint that refuses it is asked again in JSON mode", async () => {
+  const formats: unknown[] = [];
+  let refuse = false;
+  const server = Bun.serve({
+    port: 0,
+    hostname: "127.0.0.1",
+    async fetch(request) {
+      const body = (await request.json()) as { response_format?: unknown };
+      formats.push(body.response_format);
+      const format = body.response_format as { type?: string } | undefined;
+      if (refuse && format?.type === "json_schema")
+        return new Response("unsupported", { status: 400 });
+      return Response.json({
+        choices: [{ message: { content: '{"skills":[]}' } }],
+      });
+    },
+  });
+  try {
+    process.env.OPENAI_BASE_URL = `${server.url.origin}/v1`;
+    const schema = { name: "learned_skills", schema: { type: "object" } };
+    const complete = createModelCompleter({
+      model: packageModel,
+      resolveApiKey: async () => "synthetic",
+      jsonSchema: schema,
+    });
+    expect(await complete("Propose skills.")).toBe('{"skills":[]}');
+    refuse = true;
+    expect(await complete("Propose skills.")).toBe('{"skills":[]}');
+    expect(formats).toEqual([
+      { type: "json_schema", json_schema: { ...schema, strict: true } },
+      { type: "json_schema", json_schema: { ...schema, strict: true } },
+      { type: "json_object" },
+    ]);
+  } finally {
+    await server.stop(true);
+  }
+});
+
 async function bounded<T>(promise: Promise<T>, boundary: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {

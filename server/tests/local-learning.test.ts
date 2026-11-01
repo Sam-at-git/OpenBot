@@ -102,6 +102,12 @@ describe("reading the model's answer", () => {
     ]);
   });
 
+  test("a Skill whose JSON came apart is dropped, not stored cut short", () => {
+    const answer =
+      '{"skills":[{"name":"email","description":"d","instructions":"1. Subject, e.g.","请假一天":"rest","rationale":""}]}';
+    expect(parseProposals(answer)).toEqual([]);
+  });
+
   test("an empty or unreadable answer proposes nothing", () => {
     expect(parseProposals('{"skills":[]}')).toEqual([]);
     expect(parseProposals("no json here")).toEqual([]);

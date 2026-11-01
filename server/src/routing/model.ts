@@ -15,6 +15,12 @@ export function createModelCompleter(deps: {
   timeoutMs?: number;
   /** The Anthropic answer cap. Default 1024, for the router's one small object. */
   maxTokens?: number;
+  /**
+   * A JSON Schema the answer must follow, on OpenAI-compatible endpoints (`response_format: json_schema`). The model
+   * then cannot leave a quote unescaped and split one field into several. An endpoint that refuses the schema with a
+   * 400 is asked again with plain JSON mode.
+   */
+  jsonSchema?: { name: string; schema: Record<string, unknown> };
 }): (prompt: string, signal?: AbortSignal) => Promise<string> {
   const timeoutMs = deps.timeoutMs ?? 10_000;
   return async (prompt: string, signal?: AbortSignal) => {
@@ -23,7 +29,19 @@ export function createModelCompleter(deps: {
     signal?.throwIfAborted();
     if (!key) throw new Error("no model key");
     const anthropic = deps.model.provider === "anthropic";
-    const response = await fetch(
+    const schemaFormat = deps.jsonSchema
+      ? {
+          type: "json_schema",
+          json_schema: { ...deps.jsonSchema, strict: true },
+        }
+      : undefined;
+    let response = await request(schemaFormat);
+    if (!anthropic && schemaFormat && response.status === 400)
+      response = await request(undefined);
+    async function request(
+      format: Record<string, unknown> | undefined,
+    ): Promise<Response> {
+      return fetch(
       anthropic
         ? anthropicMessagesUrl(process.env)
         : chatCompletionsUrl(process.env),
@@ -53,7 +71,7 @@ export function createModelCompleter(deps: {
            */
           ...(anthropic
             ? { max_tokens: deps.maxTokens ?? 1024 }
-            : { response_format: { type: "json_object" } }),
+            : { response_format: format ?? { type: "json_object" } }),
           messages: [{ role: "user", content: prompt }],
         }),
         signal: signal
@@ -61,6 +79,7 @@ export function createModelCompleter(deps: {
           : AbortSignal.timeout(timeoutMs),
       },
     );
+    }
     if (!response.ok)
       throw new Error(`router model answered ${response.status}`);
     const body = (await response.json()) as {

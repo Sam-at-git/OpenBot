@@ -119,7 +119,9 @@ Do not propose:
 - anything that copies passwords, keys, tokens, account numbers or other secrets or personal data;
 - a Skill that repeats an existing one without improving it.
 
-Write each Skill so it is general: replace names, numbers, dates and personal details with placeholders unless they are the point. Write the description and instructions in the language the person used in the conversation.
+Write each Skill so it is general: replace names, numbers, dates and personal details with placeholders unless they are the point.
+
+Language: write "name" in English, as lower-case words joined by hyphens. Write "description", "instructions" and "rationale" in the language the person writes in. If the person writes Chinese, those three fields are in Chinese.
 
 The assistant's existing Skills. To improve one, reuse its exact name and give the whole improved text:
 ${known}
@@ -138,7 +140,39 @@ Answer with one JSON object and nothing else, in this shape:
 Return {"skills":[]} when there is nothing worth keeping, which is the usual case. Propose at most ${MAX_SKILLS_PER_CONVERSATION}.`;
 }
 
-const proposalSchema = z.object({
+/**
+ * What the model must answer with, sent as `response_format: json_schema` so the endpoint enforces it. Without it a
+ * model can leave a quote unescaped inside the instructions, which still parses, as extra keys, and cuts the
+ * instructions short.
+ */
+export const PROPOSALS_JSON_SCHEMA = {
+  name: "learned_skills",
+  schema: {
+    type: "object",
+    properties: {
+      skills: {
+        type: "array",
+        maxItems: MAX_SKILLS_PER_CONVERSATION,
+        items: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            description: { type: "string" },
+            instructions: { type: "string" },
+            rationale: { type: "string" },
+          },
+          required: ["name", "description", "instructions", "rationale"],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ["skills"],
+    additionalProperties: false,
+  },
+};
+
+/** Strict: a key the schema does not have means the model's JSON came apart, and the Skill would be cut short. */
+const proposalSchema = z.strictObject({
   name: z.string(),
   description: z.string().trim().min(1).max(400),
   instructions: z.string().trim().min(1).max(8_000),
