@@ -130,7 +130,10 @@ describe("local conversations: configuration", () => {
     expect(config.runtime).toEqual({
       mode: "local",
       durableHistory: true,
-      local: { dbPath: "/data/threads.sqlite" },
+      local: {
+        dbPath: "/data/threads.sqlite",
+        learningDbPath: "/data/openbot-learning.sqlite",
+      },
     });
   });
 

@@ -9,7 +9,9 @@ import { useId, useState } from "react";
 import { PageSection, PageShell } from "@/components/layout/page-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { LocalLearningPage } from "@/components/learning/local-learning";
 import { agentListQueryOptions } from "@/lib/agents/queries";
+import { deploymentCapabilitiesQueryOptions } from "@/lib/deployment/queries";
 import {
   createLearningContainer,
   learningAutomaticQueryOptions,
@@ -21,8 +23,19 @@ import {
 } from "@/lib/learning/queries";
 
 export const Route = createFileRoute("/_authed/admin/learning")({
-  component: LearningPage,
+  component: LearningRoute,
 });
+
+/** Local Automatic Learning when conversations are kept on this machine, Intelligence's otherwise. */
+function LearningRoute() {
+  const capabilities = useQuery(deploymentCapabilitiesQueryOptions());
+  if (capabilities.isPending) return null;
+  return capabilities.data?.localThreads ? (
+    <LocalLearningPage />
+  ) : (
+    <LearningPage />
+  );
+}
 const selectClass = "w-full rounded-md border bg-background px-3 py-2 text-sm";
 
 /** What automatic assignment found, in words, or nothing when there is nothing to say. */

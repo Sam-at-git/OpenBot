@@ -3,6 +3,7 @@
  * for durable threads and memory. Configuration the product cannot function without belongs at the
  * boot boundary.
  */
+import { dirname, join } from "node:path";
 import { intelligenceApiKey } from "@openbot/shared/intelligence-key";
 import {
   isLearningContainerId,
@@ -49,6 +50,11 @@ export type RuntimeCapabilities =
 export type LocalThreadSettings = {
   /** The SQLite file conversations are kept in (`OPENBOT_THREADS_DB`). */
   dbPath: string;
+  /**
+   * The SQLite file local Automatic Learning keeps its Skills and reviews in (`OPENBOT_LEARNING_DB`). Beside the
+   * conversations by default, so one volume holds everything local mode keeps.
+   */
+  learningDbPath: string;
 };
 
 /**
@@ -1035,11 +1041,17 @@ function runtimeCapabilities(environment: Environment): RuntimeCapabilities {
     return {
       mode: "local",
       durableHistory: true,
-      local: {
-        dbPath:
+      local: (() => {
+        const dbPath =
           optional(environment, "OPENBOT_THREADS_DB") ??
-          "./data/openbot-threads.sqlite",
-      },
+          "./data/openbot-threads.sqlite";
+        return {
+          dbPath,
+          learningDbPath:
+            optional(environment, "OPENBOT_LEARNING_DB") ??
+            join(dirname(dbPath), "openbot-learning.sqlite"),
+        };
+      })(),
     };
 
   const settings = {

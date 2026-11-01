@@ -149,6 +149,7 @@ import {
 } from "./credentials";
 import { createDatabase } from "./db/client";
 import {
+  agents,
   brokeredConnections,
   channelAgents,
   channelMemberships,
@@ -203,6 +204,8 @@ import {
   createLearningSharingStore,
   createOpenSkillIndex,
 } from "./learning/sharing";
+import { createLocalLearning } from "./local-learning";
+import { LocalLearningStore } from "./local-learning/store";
 import { localThreads } from "./local-threads/client";
 import { createMemoryDefaults } from "./memory/defaults";
 import { createMemoryIngestion } from "./memory/ingestion";
@@ -1361,6 +1364,36 @@ const resolveRuntimeModelApiKey = () =>
     environment: process.env,
   });
 
+/*
+ * Automatic Learning kept on this machine, in local mode (local-learning/index.ts).
+ *
+ * It reads the conversations in the local store and asks the deployment's own model, the same one the Bots answer on,
+ * for Skills worth keeping. An administrator reviews every one before a Bot uses it. A local model is slow on a long
+ * conversation, so a call may take minutes rather than the router's ten seconds.
+ */
+const localLearning =
+  config.runtime.mode === "local"
+    ? createLocalLearning({
+        store: new LocalLearningStore(config.runtime.local.learningDbPath),
+        threads: localThreads(config.runtime.local.dbPath).runner,
+        complete: createModelCompleter({
+          model: runtimeModel,
+          resolveApiKey: resolveRuntimeModelApiKey,
+          timeoutMs: 10 * 60_000,
+          maxTokens: 8192,
+        }),
+        botName: async (agentId) =>
+          (
+            await database
+              .select({ name: agents.name })
+              .from(agents)
+              .where(eq(agents.id, agentId))
+              .limit(1)
+          )[0]?.name,
+      })
+    : undefined;
+localLearning?.start();
+
 const hostAccessBroker = createHostAccessBroker(Date.now, {
   approvalGate: approvalService.gate,
   commandPolicy: (actorId) => approvalService.hostCommandPolicy(actorId),
@@ -1878,7 +1911,7 @@ const actorAgentResolver = createActorAgentResolver({
   markAttachmentsSentForActor,
   // The runtime owns Learning. Resolve its reader only when a turn is built, after boot wiring.
   get acquireLearnedSkills() {
-    return copilotRuntime.learning?.acquire;
+    return copilotRuntime.learning?.acquire ?? localLearning?.acquire;
   },
   loadPersonalMemoryForActor,
 });
@@ -2688,6 +2721,7 @@ const app = createApp(
     autoAssign: learningAutoAssign,
     status: copilotRuntime.learning?.status,
     inspect: copilotRuntime.learning?.inspect,
+    ...(localLearning ? { local: localLearning } : {}),
   },
   {
     approvals: approvalService,

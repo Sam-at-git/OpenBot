@@ -3,6 +3,7 @@ import type {
   LearningDeliveryStatus,
   LearningOverview,
   LearningSettings,
+  LocalLearningState,
   PersonalLearningSharing,
 } from "@openbot/shared/learning";
 import { queryOptions } from "@tanstack/react-query";
@@ -13,7 +14,24 @@ export const learningKeys = {
   settings: ["learning", "settings"] as const,
   automatic: ["learning", "automatic"] as const,
   personal: ["learning", "personal"] as const,
+  local: ["learning", "local"] as const,
 };
+
+/**
+ * Admin, Automatic learning, in local mode: settings, the latest analysis, and every Skill waiting for review or in
+ * use. Checked every few seconds while an analysis runs, so its progress and its proposals appear without a reload.
+ */
+export function localLearningQueryOptions() {
+  return queryOptions({
+    queryKey: learningKeys.local,
+    queryFn: (): Promise<LocalLearningState> =>
+      client("/api/admin/learning/local", "state", {
+        fallback: "Couldn't load Automatic learning. Reload the page.",
+      }),
+    refetchInterval: (query) =>
+      query.state.data?.latestRun?.status === "running" ? 5_000 : false,
+  });
+}
 /**
  * Settings, Learning: who else's Bots use the Skills learned from your own recordings, and the Skills in your own
  * Learning space (null when Intelligence did not deliver them).

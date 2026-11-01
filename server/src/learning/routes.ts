@@ -8,6 +8,8 @@ import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { type AuditStore, recordAuditEvent } from "../audit";
 import { type AppVariables, requireAdmin } from "../auth/guards";
+import type { LocalLearning } from "../local-learning";
+import { mountLocalLearningRoutes } from "../local-learning/routes";
 import type { LearningAutoAssign } from "./auto-assign";
 import { type LearningSettingsStore, parseLearningSettings } from "./settings";
 
@@ -25,6 +27,8 @@ export type LearningAdminDependencies = {
     agentId?: string;
     runtimeContainerId?: string;
   }) => Promise<InspectorSnapshot>;
+  /** Local Automatic Learning (`OPENBOT_THREADS=local`): its own review and settings under `/local`. */
+  local?: LocalLearning;
 };
 
 function overview(snapshot: InspectorSnapshot): LearningOverview {
@@ -104,6 +108,13 @@ export function createLearningRoutes(
         : context.req.header("sec-fetch-site") !== "cross-site")
     );
   };
+  if (dependencies.local)
+    mountLocalLearningRoutes({
+      routes,
+      local: dependencies.local,
+      sameOriginJson,
+      audit,
+    });
   /**
    * Create this project's container with the credential this deployment holds, then assign it.
    * Offered only when there is one (`automatic.canCreate`); without one the page shows what to run.

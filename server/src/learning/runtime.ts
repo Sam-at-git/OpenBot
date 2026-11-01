@@ -58,6 +58,29 @@ const skillTools: readonly Tool[] = [
   },
 ];
 
+/**
+ * What one run is handed for a snapshot: the catalog for its prompt and the two tools that load a Skill. Shared by
+ * Intelligence delivery (below) and local Automatic Learning (local-learning/), so a Bot reads both the same way.
+ */
+export function learnedSkillInvocation(
+  snapshot: VerifiedSnapshot,
+): LearnedSkillInvocation {
+  return {
+    catalog: snapshot.skills.length > 0 ? formatSkillCatalog(snapshot) : "",
+    tools: snapshot.skills.length > 0 ? skillTools : [],
+    execute: async (name, args) => {
+      if (name === "copilotkit_load_skill") {
+        return loadSkill(snapshot, skillArgs.parse(args).skill_name);
+      }
+      if (name === "copilotkit_read_skill_file") {
+        const parsed = fileArgs.parse(args);
+        return readSkillFile(snapshot, parsed.skill_name, parsed.path);
+      }
+      throw new Error("That is not a learned Skill tool.");
+    },
+  };
+}
+
 /** Whether an administrator excluded this Bot from Automatic Learning (a per-Bot mapping of null). */
 function excludedFromLearning(
   settings: LearningSettings,
@@ -340,20 +363,7 @@ export function createLearningRuntime(options: {
     if (!snapshot || (!target && snapshot.skills.length === 0)) {
       return undefined;
     }
-    return {
-      catalog: snapshot.skills.length > 0 ? formatSkillCatalog(snapshot) : "",
-      tools: snapshot.skills.length > 0 ? skillTools : [],
-      execute: async (name, args) => {
-        if (name === "copilotkit_load_skill") {
-          return loadSkill(snapshot, skillArgs.parse(args).skill_name);
-        }
-        if (name === "copilotkit_read_skill_file") {
-          const parsed = fileArgs.parse(args);
-          return readSkillFile(snapshot, parsed.skill_name, parsed.path);
-        }
-        throw new Error("That is not a learned Skill tool.");
-      },
-    };
+    return learnedSkillInvocation(snapshot);
   };
 
   return {

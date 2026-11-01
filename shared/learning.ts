@@ -129,3 +129,71 @@ export type PersonalLearningSharing = {
    * delivery is off, the space does not exist yet, or it could not be reached). */
   unavailable?: "off" | "unavailable";
 };
+
+/**
+ * Local Automatic Learning (`OPENBOT_THREADS=local`): Skills this machine's own model proposes from the conversations
+ * kept on this machine, which an administrator reviews before any Bot uses them. Nothing here leaves the machine.
+ */
+export const LOCAL_SKILL_STATUSES = [
+  "pending",
+  "approved",
+  "rejected",
+  "retired",
+] as const;
+export type LocalSkillStatus = (typeof LOCAL_SKILL_STATUSES)[number];
+
+/** A learned Skill name in local mode: lower-case words joined by hyphens, as the analyzer is asked to write them. */
+export const LOCAL_SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+export function isLocalSkillName(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length <= 64 &&
+    LOCAL_SKILL_NAME.test(value)
+  );
+}
+
+export type LocalLearnedSkill = {
+  id: string;
+  agentId: string;
+  name: string;
+  /** When to use it, one sentence. The only part a Bot sees until it loads the Skill. */
+  description: string;
+  /** What to do, in Markdown. What a Bot reads when it loads the Skill. */
+  instructions: string;
+  /** Why the analyzer proposed it, from the conversations it read. */
+  rationale: string;
+  status: LocalSkillStatus;
+  /** The approved Skill this one would replace when approved, if it is a revision. */
+  revisionOf: string | null;
+  /** How many conversations it was learned from. */
+  sourceCount: number;
+  createdAt: string;
+  updatedAt: string;
+  decidedAt: string | null;
+};
+
+export type LocalLearningSettings = {
+  enabled: boolean;
+  /** How often the analyzer reads new conversations. */
+  intervalHours: number;
+  /** Bots that neither learn nor use learned Skills. */
+  excludedAgents: string[];
+};
+
+export type LocalLearningRun = {
+  startedAt: string;
+  finishedAt: string | null;
+  status: "running" | "succeeded" | "failed";
+  conversationsRead: number;
+  proposed: number;
+  error: string | null;
+};
+
+export type LocalLearningState = {
+  settings: LocalLearningSettings;
+  latestRun: LocalLearningRun | null;
+  nextRunAt: string | null;
+  /** Conversations with something the analyzer has not read yet. */
+  waitingConversations: number;
+  skills: LocalLearnedSkill[];
+};

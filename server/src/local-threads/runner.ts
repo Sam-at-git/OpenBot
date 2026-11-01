@@ -733,7 +733,52 @@ export class LocalAgentRunner extends AgentRunner {
     })();
   }
 
+  // ---------------------------------------------------------------------------------------------
+  // Automatic Learning (local-learning/)
+
+  /**
+   * Every thread with at least one run, across owners, oldest change first, for the local analyzer.
+   * The Bot is the one that ran last. Server-side only: no route a browser reaches calls this.
+   */
+  learningThreads(): LearningThreadRecord[] {
+    return this.db
+      .query<
+        {
+          thread_id: string;
+          owner_id: string;
+          agent_id: string;
+          run_count: number;
+          updated_at: number;
+        },
+        []
+      >(
+        `SELECT t.thread_id, t.owner_id, t.updated_at,
+           (SELECT r.agent_id FROM agent_runs r WHERE r.thread_id = t.thread_id ORDER BY r.id DESC LIMIT 1) AS agent_id,
+           (SELECT COUNT(*) FROM agent_runs r WHERE r.thread_id = t.thread_id) AS run_count
+         FROM threads t
+         WHERE EXISTS (SELECT 1 FROM agent_runs r WHERE r.thread_id = t.thread_id)
+           AND t.thread_id NOT IN (SELECT thread_id FROM run_state WHERE is_running = 1)
+         ORDER BY t.updated_at ASC`,
+      )
+      .all()
+      .map((row) => ({
+        threadId: row.thread_id,
+        ownerId: row.owner_id,
+        agentId: row.agent_id,
+        runCount: row.run_count,
+        updatedAt: row.updated_at,
+      }));
+  }
+
   close(): void {
     this.db.close();
   }
 }
+
+export type LearningThreadRecord = {
+  threadId: string;
+  ownerId: string;
+  agentId: string;
+  runCount: number;
+  updatedAt: number;
+};

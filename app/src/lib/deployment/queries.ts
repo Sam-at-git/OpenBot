@@ -29,6 +29,11 @@ export type DeploymentCapabilities = {
    * deployment: single-user mode on the server, which only a local, unreachable install can be in.
    */
   localEvaluation: boolean;
+  /**
+   * Whether conversations are kept on this machine (`OPENBOT_THREADS=local`) instead of in CopilotKit Intelligence.
+   * Automatic Learning then runs locally too, and Admin, Automatic learning shows its local review.
+   */
+  localThreads: boolean;
   transcription?: boolean;
   voice?: boolean;
 };
@@ -68,6 +73,7 @@ export function deploymentCapabilitiesQueryOptions() {
         generativeUi?: boolean;
         selfHostBanner?: boolean;
         localEvaluation?: boolean;
+        mode?: string;
         transcription?: boolean;
         voice?: boolean;
       };
@@ -76,6 +82,7 @@ export function deploymentCapabilitiesQueryOptions() {
         generativeUi: body.generativeUi === true,
         selfHostBanner: body.selfHostBanner === true,
         localEvaluation: body.localEvaluation === true,
+        localThreads: body.mode === "local",
         transcription: body.transcription === true,
         voice: body.voice === true,
       };
