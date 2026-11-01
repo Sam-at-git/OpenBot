@@ -61,7 +61,6 @@ import {
 import type { AgentFetch, StallGuard } from "./channels/stall-guard";
 import type { DeploymentConfig } from "./config";
 import { observeModelConnection } from "./desktop-connection-failure";
-import { runUsage } from "./llm/run-usage";
 import { desktopTelemetryProperties } from "./desktop-telemetry";
 import { observeIntelligenceAuthentication } from "./intelligence-client";
 import { RemoteLearnedSkillsMiddleware } from "./learning/remote";
@@ -74,6 +73,7 @@ import {
   type PersonalSkillSources,
 } from "./learning/runtime";
 import type { LearningSettingsStore } from "./learning/settings";
+import { runUsage } from "./llm/run-usage";
 import { localThreads } from "./local-threads/client";
 import {
   type LoadPersonalMemory,

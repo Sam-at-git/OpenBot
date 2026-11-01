@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { BaseEvent } from "@ag-ui/client";
-import { Observable, lastValueFrom, toArray } from "rxjs";
+import { lastValueFrom, Observable, toArray } from "rxjs";
 import type { PlanLanguageModel } from "../src/agents/plan-model";
 import { runUsage, USAGE_EVENT } from "../src/llm/run-usage";
 
-const fakeModel = (usages: Array<{ inputTokens: number; outputTokens: number }>) =>
+const fakeModel = (
+  usages: Array<{ inputTokens: number; outputTokens: number }>,
+) =>
   ({
     specificationVersion: "v2",
     provider: "test",
@@ -30,7 +32,10 @@ describe("runUsage", () => {
     const run = new Observable<BaseEvent>((subscriber) => {
       void (async () => {
         await usage.model.doGenerate({} as never);
-        subscriber.next({ type: "TEXT_MESSAGE_START", messageId: "m1" } as BaseEvent);
+        subscriber.next({
+          type: "TEXT_MESSAGE_START",
+          messageId: "m1",
+        } as BaseEvent);
         await usage.model.doGenerate({} as never);
         subscriber.next({ type: "RUN_FINISHED", runId: "r1" } as BaseEvent);
         subscriber.complete();

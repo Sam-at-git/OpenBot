@@ -43,16 +43,17 @@ const number = new Intl.NumberFormat();
 /** "deepseek-chat · 12,345 tokens in · 678 out", summed over every report for one reply. */
 export function usageLabel(reports: readonly TurnUsage[]): string | undefined {
   if (reports.length === 0) return undefined;
-  const models = [...new Set(reports.map((report) => report.model))].join(
-    ", ",
-  );
+  const models = [...new Set(reports.map((report) => report.model))].join(", ");
   const counted = reports.filter(
     (report) => report.inputTokens !== null || report.outputTokens !== null,
   );
   const calls = reports.reduce((sum, report) => sum + report.calls, 0);
   const steps = calls > 1 ? ` · ${number.format(calls)} model calls` : "";
   if (counted.length === 0) return `${models} · tokens not reported${steps}`;
-  const input = counted.reduce((sum, report) => sum + (report.inputTokens ?? 0), 0);
+  const input = counted.reduce(
+    (sum, report) => sum + (report.inputTokens ?? 0),
+    0,
+  );
   const output = counted.reduce(
     (sum, report) => sum + (report.outputTokens ?? 0),
     0,

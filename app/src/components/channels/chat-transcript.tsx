@@ -5,7 +5,6 @@ import {
   useRenderActivityMessage,
   useRenderToolCall,
 } from "@copilotkit/react-core/v2";
-import { useQuery } from "@tanstack/react-query";
 import {
   readConnectPrompt,
   SHOW_APP_ACCESS_TOOL,
@@ -18,6 +17,7 @@ import {
   IconFile,
   IconX,
 } from "@tabler/icons-react";
+import { useQuery } from "@tanstack/react-query";
 import { motion, useReducedMotion } from "motion/react";
 import {
   createContext,
@@ -59,6 +59,8 @@ import { readResponsibilityTurn } from "@/lib/channels/responsibility-turn";
 import { readFiring } from "@/lib/channels/routine-firing";
 import type { CardPlace } from "@/lib/copilot/carry-on";
 import { ToolPlaceContext } from "@/lib/copilot/tool-place";
+import { useTurnUsageLabels } from "@/lib/copilot/turn-usage";
+import { deploymentCapabilitiesQueryOptions } from "@/lib/deployment/queries";
 import { markdownComponents } from "@/lib/markdown";
 import { EASE_OUT, ENTRANCE_SECONDS } from "@/lib/motion";
 import { readToolName } from "@/lib/plugins/tool-name";
@@ -71,7 +73,6 @@ import {
 import { readTeamBotConsent } from "@/lib/team-bots";
 import { cn } from "@/lib/utils";
 import { VOICE_CHAT_ACTIVITY, type VoiceChatEntry } from "@/lib/voice/archive";
-import { deploymentCapabilitiesQueryOptions } from "@/lib/deployment/queries";
 import { AppAccessCard } from "./app-access-card";
 import { isBrowserStep } from "./browser-activity";
 import {
@@ -94,6 +95,7 @@ import {
   useDrawnTool,
 } from "./tool-activity";
 import { ToolRenderBoundary, toolCallFinal } from "./tool-boundary";
+import { ToolLine } from "./tool-line";
 import { shouldDrawEarlier, useTranscriptPages } from "./transcript-pages";
 import { TranscriptRail } from "./transcript-rail";
 import {
@@ -103,8 +105,6 @@ import {
   type Turn,
   turnsOf,
 } from "./transcript-turns";
-import { useTurnUsageLabels } from "@/lib/copilot/turn-usage";
-import { ToolLine } from "./tool-line";
 import { VoiceChatCard } from "./voice-chat-card";
 
 type ChatTranscriptProps = {

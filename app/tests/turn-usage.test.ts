@@ -20,7 +20,10 @@ describe("usageLabel", () => {
 
   test("sums every report for one reply and counts model calls", () => {
     expect(
-      usageLabel([report({ calls: 3 }), report({ runId: "r2", inputTokens: 800, outputTokens: 6, calls: 2 })]),
+      usageLabel([
+        report({ calls: 3 }),
+        report({ runId: "r2", inputTokens: 800, outputTokens: 6, calls: 2 }),
+      ]),
     ).toBe("deepseek-chat · 2,000 tokens in · 40 out · 5 model calls");
   });
 
