@@ -236,6 +236,10 @@ services:
     build:
       context: .
       dockerfile: agent-computer/Dockerfile
+      # Optional mirrors for the Python the computer carries (agent-computer/Dockerfile).
+      args:
+        APT_MIRROR: ${COMPUTER_APT_MIRROR:-}
+        PIP_INDEX_URL: ${COMPUTER_PIP_INDEX_URL:-}
     # Tagged explicitly because the supervisor starts one computer per Bot from this image by name,
     # and a Compose-derived name would change with the project.
     image: ${COMPUTER_IMAGE:-openbot-agent-computer:latest}

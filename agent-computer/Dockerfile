@@ -48,6 +48,30 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && bunx --bun "playwright@${PLAYWRIGHT_VERSION}" install --with-deps --no-shell chromium \
   && rm -rf /root/.cache /root/.bun /usr/local/install/cache /tmp/* /var/lib/apt/lists/*
 
+# Python for the scripts a skill runs on the computer (`python`, `pip`). Ubuntu's own Python refuses
+# `pip install` into the system (PEP 668), so a virtual environment at /opt/python comes first on
+# PATH: `python` and `pip` are its, and a package a Bot installs lands there. It lasts until the
+# computer is replaced; anything that must survive that belongs in /workspace.
+#
+# Both mirrors are optional build arguments for networks where the defaults are slow or blocked:
+# APT_MIRROR replaces the Ubuntu archive host for this install (e.g. mirrors.tuna.tsinghua.edu.cn),
+# and PIP_INDEX_URL becomes the computer's pip index (/etc/pip.conf). Unset changes nothing.
+ARG APT_MIRROR=
+ARG PIP_INDEX_URL=
+RUN if [ -n "$APT_MIRROR" ]; then \
+      sed -i -E "s#https?://(archive|security|ports)\.ubuntu\.com#http://${APT_MIRROR}#g" \
+        /etc/apt/sources.list.d/ubuntu.sources; \
+    fi \
+  && apt-get update && apt-get install -y --no-install-recommends \
+      python3 python3-venv python3-pip \
+  && python3 -m venv /opt/python \
+  && if [ -n "$PIP_INDEX_URL" ]; then \
+      printf "[global]\nindex-url = %s\n" "$PIP_INDEX_URL" > /etc/pip.conf; \
+    fi \
+  && /opt/python/bin/pip install --no-cache-dir --upgrade pip \
+  && rm -rf /root/.cache /var/lib/apt/lists/*
+ENV PATH="/opt/python/bin:${PATH}"
+
 WORKDIR /app
 # The lockfile as well as the manifest: `--frozen-lockfile` with no lockfile present resolves afresh
 # and exits 0, so the file has to be here for the flag to mean anything.
