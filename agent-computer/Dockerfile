@@ -72,6 +72,15 @@ RUN if [ -n "$APT_MIRROR" ]; then \
   && rm -rf /root/.cache /var/lib/apt/lists/*
 ENV PATH="/opt/python/bin:${PATH}"
 
+# Local OCR for scanned PDFs (`pdf-ocr`), so a document is read on this computer and not sent to a
+# cloud service. RapidOCR carries its Chinese and English models inside the wheel, so nothing is
+# downloaded at run time; the computer's egress policy would block that anyway.
+RUN /opt/python/bin/pip install --no-cache-dir \
+      rapidocr-onnxruntime==1.4.4 pymupdf==2.0 \
+  && /opt/python/bin/python -c "from rapidocr_onnxruntime import RapidOCR; RapidOCR(); import fitz" \
+  && rm -rf /root/.cache
+COPY --chmod=755 agent-computer/bin/pdf-ocr /usr/local/bin/pdf-ocr
+
 WORKDIR /app
 # The lockfile as well as the manifest: `--frozen-lockfile` with no lockfile present resolves afresh
 # and exits 0, so the file has to be here for the flag to mean anything.

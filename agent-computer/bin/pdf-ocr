@@ -1,0 +1,97 @@
+#!/opt/python/bin/python
+"""PDF to text on this computer, with nothing sent anywhere.
+
+Pages that carry a text layer are read as they are; scanned pages are recognised with RapidOCR,
+which ships its Chinese and English models inside the package. Every page starts with a
+`=== page N ===` line so a reader can cite where a value came from.
+
+    pdf-ocr ~/uploads/contract.pdf                 # text to stdout
+    pdf-ocr ~/uploads/contract.pdf -o ocr.txt      # text to a file
+    pdf-ocr ~/uploads/contract.pdf --force-ocr --pages 1-3 --dpi 300
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+import time
+
+MIN_TEXT_LAYER_CHARS = 30
+
+
+def parse_pages(spec: str | None, count: int) -> list[int]:
+    if not spec:
+        return list(range(count))
+    chosen: set[int] = set()
+    for part in spec.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "-" in part:
+            start, end = part.split("-", 1)
+            first = int(start) if start else 1
+            last = int(end) if end else count
+            chosen.update(range(first - 1, min(last, count)))
+        else:
+            chosen.add(int(part) - 1)
+    return sorted(page for page in chosen if 0 <= page < count)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="PDF to text, locally (text layer or OCR).")
+    parser.add_argument("pdf")
+    parser.add_argument("-o", "--out", help="write the text here instead of stdout")
+    parser.add_argument("--pages", help="pages to read, e.g. 1-3,7 (default: all)")
+    parser.add_argument("--dpi", type=int, default=200, help="render resolution for OCR (default 200)")
+    parser.add_argument("--force-ocr", action="store_true", help="OCR every page, even with a text layer")
+    args = parser.parse_args()
+
+    import fitz  # pymupdf
+
+    try:
+        document = fitz.open(args.pdf)
+    except Exception as exc:  # noqa: BLE001
+        print(f"pdf-ocr: can't open {args.pdf}: {exc}", file=sys.stderr)
+        return 2
+
+    engine = None
+    started = time.time()
+    chunks: list[str] = []
+    ocr_pages = 0
+    for index in parse_pages(args.pages, document.page_count):
+        page = document[index]
+        text = "" if args.force_ocr else page.get_text().strip()
+        if len(text) < MIN_TEXT_LAYER_CHARS:
+            if engine is None:
+                from rapidocr_onnxruntime import RapidOCR
+
+                engine = RapidOCR()
+            import numpy as np
+
+            pixmap = page.get_pixmap(dpi=args.dpi)
+            image = np.frombuffer(pixmap.samples, dtype=np.uint8).reshape(
+                pixmap.height, pixmap.width, pixmap.n
+            )
+            if pixmap.n == 4:
+                image = image[:, :, :3]
+            result, _ = engine(image)
+            text = "\n".join(line[1] for line in (result or []))
+            ocr_pages += 1
+        chunks.append(f"=== page {index + 1} ===\n{text}\n")
+
+    output = "\n".join(chunks)
+    if args.out:
+        with open(args.out, "w", encoding="utf-8") as handle:
+            handle.write(output)
+    else:
+        sys.stdout.write(output)
+    print(
+        f"pdf-ocr: {len(chunks)} pages ({ocr_pages} by OCR) in {time.time() - started:.1f}s"
+        + (f", written to {args.out}" if args.out else ""),
+        file=sys.stderr,
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
