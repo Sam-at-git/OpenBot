@@ -23,6 +23,19 @@ export type TitlerOptions = {
   fetchImpl?: typeof fetch;
   /** How long one call may take before it is given up on. */
   timeoutMs?: number;
+  /**
+   * Where the call goes when an admin chose a model (llm/index.ts `backgroundTarget`), and how its usage is recorded.
+   * Undefined keeps `model` at OPENAI_BASE_URL.
+   */
+  target?: () => Promise<
+    | {
+        baseUrl: string;
+        apiKey: string | null;
+        model: string;
+        onUsage?: (usage: { inputTokens: number; outputTokens: number }) => void;
+      }
+    | undefined
+  >;
 };
 
 /** No key resolves to null and is not retried; a provider error throws, so the queue retries it. */
@@ -30,11 +43,16 @@ export function createChannelTitler(options: TitlerOptions) {
   const call = options.fetchImpl ?? fetch;
 
   return async (excerpt: string): Promise<string | null> => {
-    const apiKey = await options.resolveApiKey();
+    const chosen = await options.target?.();
+    const apiKey = chosen
+      ? chosen.apiKey || "not-needed"
+      : await options.resolveApiKey();
     if (!apiKey) return null;
 
     const response = await call(
-      chatCompletionsUrl(options.environment ?? process.env),
+      chosen
+        ? `${chosen.baseUrl.replace(/\/+$/, "")}/chat/completions`
+        : chatCompletionsUrl(options.environment ?? process.env),
       {
         method: "POST",
         headers: {
@@ -42,7 +60,7 @@ export function createChannelTitler(options: TitlerOptions) {
           authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: options.model,
+          model: chosen?.model ?? options.model,
           messages: [
             { role: "system", content: INSTRUCTION },
             { role: "user", content: excerpt },
@@ -64,7 +82,16 @@ export function createChannelTitler(options: TitlerOptions) {
 
     const body = (await response.json()) as {
       choices?: { message?: { content?: unknown } }[];
+      usage?: { prompt_tokens?: unknown; completion_tokens?: unknown };
     };
+    if (chosen?.onUsage) {
+      const count = (value: unknown) =>
+        typeof value === "number" && Number.isFinite(value) ? value : 0;
+      chosen.onUsage({
+        inputTokens: count(body.usage?.prompt_tokens),
+        outputTokens: count(body.usage?.completion_tokens),
+      });
+    }
     const content = body.choices?.[0]?.message?.content;
     if (typeof content !== "string") return null;
     const answer = content.trim();

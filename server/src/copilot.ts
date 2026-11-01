@@ -42,6 +42,7 @@ import {
   CoworkerUnavailableError,
 } from "./agents/agent-resolver";
 import {
+  type PlanLanguageModel,
   PlanModel,
   type PlanModelConfig,
   planModelForEnvironment,
@@ -439,7 +440,8 @@ export function builtInAgentConfiguration(
    * none, which is most people on most days and costs the prompt nothing.
    */
   standingInstructions?: string | null,
-  planModel?: PlanModel,
+  /** A model to run on instead of the provider string: a desktop plan, or the model an admin chose (llm/). */
+  planModel?: PlanLanguageModel,
   learnedSkills?: LearnedSkillInvocation,
 ): BuiltInAgentConfiguration {
   if (!apiKey && !planModel) {
@@ -594,6 +596,7 @@ export async function buildAgents(
   markAttachmentsSent?: MarkAttachmentsSent,
   acquireLearnedSkills?: AcquireLearnedSkills,
   loadPersonalMemory?: LoadPersonalMemory,
+  languageModelFor?: LanguageModelForBot,
 ): Promise<Record<string, AbstractAgent>> {
   let vendors: readonly string[] = [];
   try {
@@ -650,6 +653,7 @@ export async function buildAgents(
           loadAttachment,
           markAttachmentsSent,
           acquireLearnedSkills,
+          languageModelFor,
         );
         if (loadPersonalMemory)
           built.use(new PersonalMemoryMiddleware(agent.id, loadPersonalMemory));
@@ -912,12 +916,16 @@ async function buildAgent(
   /** How this run records that those files were sent. See {@link buildAgents}. */
   markAttachmentsSent?: MarkAttachmentsSent,
   acquireLearnedSkills?: AcquireLearnedSkills,
+  languageModelFor?: LanguageModelForBot,
 ): Promise<AbstractAgent> {
   if (agent.type === "unavailable") {
     return new UnavailableAgent(agent);
   }
 
   const granted = await loadTools(agent.id);
+  // The admin's choice of model for this Bot, if any. A desktop plan, below, still comes first.
+  const chosenModel =
+    agent.type === "built_in" ? await languageModelFor?.(agent.id) : undefined;
 
   /*
    * Whether narrowing can do anything here at all.
@@ -1046,7 +1054,7 @@ async function buildAgent(
               new Set(input.tools.map((tool) => tool.name)),
               signal,
             )
-          : undefined,
+          : chosenModel,
         learnedSkills,
       ),
       {
@@ -1656,6 +1664,7 @@ export async function resolveRuntimeAgents(
   markAttachmentsSent?: MarkAttachmentsSent,
   acquireLearnedSkills?: AcquireLearnedSkills,
   loadPersonalMemory?: LoadPersonalMemory,
+  languageModelFor?: LanguageModelForBot,
 ): Promise<Record<string, AbstractAgent>> {
   const all = await loadAgents();
   if (all.length === 0) {
@@ -1692,11 +1701,21 @@ export async function resolveRuntimeAgents(
     markAttachmentsSent,
     acquireLearnedSkills,
     loadPersonalMemory,
+    languageModelFor,
   );
 }
 
 /** What one Bot may call, for the person whose request this is. */
 export type LoadToolsForBot = (botId: string) => Promise<GrantedTool[]>;
+
+/**
+ * The model one built-in Bot runs on, for the person whose request this is, when an admin chose one under Admin,
+ * Models (llm/). Undefined keeps the model this OpenBot was started with. Read per request, so a change applies to
+ * the next message without a restart.
+ */
+export type LanguageModelForBot = (
+  botId: string,
+) => Promise<PlanLanguageModel | undefined>;
 
 /**
  * The deployment's signed statement of what a run is, for the agent that will run it.

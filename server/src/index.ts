@@ -204,6 +204,9 @@ import {
   createLearningSharingStore,
   createOpenSkillIndex,
 } from "./learning/sharing";
+import { ensureBootstrapInvite } from "./auth/password";
+import { createLlmService } from "./llm";
+import { createLlmStore } from "./llm/store";
 import { createLocalLearning } from "./local-learning";
 import { LocalLearningStore } from "./local-learning/store";
 import { localThreads } from "./local-threads/client";
@@ -563,6 +566,23 @@ const betterAuth =
       )
     : undefined;
 const auth: AuthService | undefined = organizationAuth ?? betterAuth;
+/*
+ * Password accounts (auth/password.ts): until the first one exists, keep a bootstrap invite and say where it is. The
+ * account made with it becomes an administrator and keeps everything the single user made before.
+ */
+if (betterAuth && config.auth?.password)
+  void ensureBootstrapInvite(database)
+    .then((code) => {
+      if (!code) return;
+      const origin =
+        config.appUrl ?? config.auth?.trustedOrigins[0] ?? "http://localhost:3010";
+      console.info(
+        `No password account exists yet. Open this invite to create the first one, which becomes the admin and keeps everything already in OpenBot: ${origin.replace(/\/+$/, "")}/sign-up?invite=${code}`,
+      );
+    })
+    .catch(() => {
+      console.error(JSON.stringify({ type: "password-bootstrap-invite-failed" }));
+    });
 const { resolveRequestActor, identifyUser, identifyActor } = createRequestActor(
   {
     singleUser: config.singleUser,
@@ -749,6 +769,36 @@ if (chooseOpenAIApi(runtimeModel) === "responses")
     }),
   );
 
+/*
+ * Admin, Models and Admin, Usage (llm/). Which model each built-in Bot and each background call uses, chosen by an
+ * admin, and a token count for every call. With nothing chosen, everything runs on `runtimeModel` as before; that
+ * model is counted too when it is an OpenAI-compatible chat endpoint (COPILOTKIT_OPENAI_API=chat).
+ */
+const llmService = createLlmService({
+  store: createLlmStore(database, config.keyEncryptionKey),
+  builtIn: {
+    provider: runtimeModel.provider,
+    model: runtimeModel.defaultModel,
+    baseUrl:
+      (runtimeModel.provider === "anthropic"
+        ? process.env.ANTHROPIC_BASE_URL
+        : process.env.OPENAI_BASE_URL
+      )?.trim() || null,
+    chatCompatible:
+      runtimeModel.provider === "openai" &&
+      !runtimeModel.plan &&
+      process.env.COPILOTKIT_OPENAI_API?.trim() === "chat",
+    resolveApiKey: () =>
+      resolveModelApiKey({
+        encryptionKey: config.keyEncryptionKey,
+        reader: credentialStore,
+        provider: runtimeModel.provider,
+        keyId: tenantPackage.model.credentialSecretRef,
+        environment: process.env,
+      }),
+  },
+});
+
 /**
  * Pass one of tool selection: which skills a message needs, on the deployment's own model.
  *
@@ -757,6 +807,20 @@ if (chooseOpenAIApi(runtimeModel) === "responses")
  */
 const chooseSkills = createModelCompleter({
   model: runtimeModel,
+  target: llmService.backgroundTarget("tool-selection"),
+  resolveApiKey: () =>
+    resolveModelApiKey({
+      encryptionKey: config.keyEncryptionKey,
+      reader: credentialStore,
+      provider: runtimeModel.provider,
+      keyId: tenantPackage.model.credentialSecretRef,
+      environment: process.env,
+    }),
+});
+/** The same call for reviewing an approval, counted under its own purpose on Admin, Usage. */
+const reviewApprovals = createModelCompleter({
+  model: runtimeModel,
+  target: llmService.backgroundTarget("approval-review"),
   resolveApiKey: () =>
     resolveModelApiKey({
       encryptionKey: config.keyEncryptionKey,
@@ -835,7 +899,7 @@ const approvalService = createServerApprovalService({
   authoriseQuestion,
   routineIntelligence,
   approvalComputerTools,
-  review: (prompt, signal) => chooseSkills(prompt, signal),
+  review: (prompt, signal) => reviewApprovals(prompt, signal),
   // Assigned further down, once delivery is wired.
   notify: (scope, input) => deliveryNotifications(scope, input),
 });
@@ -1326,6 +1390,7 @@ const stallGuard = createStallGuard({
 const intentRouter = createIntentRouter({
   complete: createModelCompleter({
     model: runtimeModel,
+    target: llmService.backgroundTarget("routing"),
     resolveApiKey: () =>
       resolveModelApiKey({
         encryptionKey: config.keyEncryptionKey,
@@ -1383,6 +1448,7 @@ const localLearning =
           maxTokens: 8192,
           // The answer is tagged text, not JSON (local-learning/analyze.ts).
           json: false,
+          target: llmService.backgroundTarget("learning"),
         }),
         botName: async (agentId) =>
           (
@@ -1916,6 +1982,7 @@ const actorAgentResolver = createActorAgentResolver({
     return copilotRuntime.learning?.acquire ?? localLearning?.acquire;
   },
   loadPersonalMemoryForActor,
+  languageModelForActor: (actorId) => llmService.languageModelForActor(actorId),
 });
 
 const copilotRuntime = mountCopilotRuntime(
@@ -2504,6 +2571,7 @@ const channelSummaries = {
   title: createChannelTitler({
     model: runtimeModel.defaultModel,
     resolveApiKey: resolveRuntimeModelApiKey,
+    target: llmService.backgroundTarget("title"),
   }),
   owner: workOwner("summariser"),
 };
@@ -2796,6 +2864,28 @@ const app = createApp(
             singleUser: config.singleUser,
           },
         }
+      : {}),
+    llm: {
+      llm: llmService,
+      labels: async () => {
+        const [bots, people] = await Promise.all([
+          database.select({ id: agents.id, name: agents.name }).from(agents),
+          database
+            .select({ id: users.id, name: users.name, email: users.email })
+            .from(users),
+        ]);
+        const botName = new Map(bots.map((bot) => [bot.id, bot.name]));
+        const personName = new Map(
+          people.map((person) => [person.id, person.name || person.email]),
+        );
+        return {
+          bot: (agentId) => botName.get(agentId) ?? agentId,
+          person: (userId) => personName.get(userId) ?? userId,
+        };
+      },
+    },
+    ...(betterAuth && config.auth?.password
+      ? { password: { auth: betterAuth, database } }
       : {}),
     personalLearning: {
       store: learningSharingStore,

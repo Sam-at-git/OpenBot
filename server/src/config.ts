@@ -154,7 +154,17 @@ export type AuthConfig = {
   microsoft?: OAuthClient & { tenantId: string };
   /** Okta is an OIDC provider rather than a named one, so it is identified by its issuer. */
   okta?: OAuthClient & { issuer: string };
+  /**
+   * Email and password accounts, created only with an invite (OPENBOT_PASSWORD_SIGN_IN=true, auth/password.ts). The
+   * first account becomes an administrator, so INITIAL_ADMIN_EMAILS is not required with it.
+   */
+  password?: boolean;
 };
+
+/** Whether anybody signs in at all: a social or OIDC provider, or password accounts. */
+export function signInConfigured(auth: AuthConfig | undefined): boolean {
+  return configuredAuthProviders(auth).length > 0 || auth?.password === true;
+}
 
 /**
  * The providers this deployment can actually sign somebody in with.
@@ -846,11 +856,13 @@ function authConfig(
 
   const secret = optional(environment, "BETTER_AUTH_SECRET");
   const baseUrl = url(environment, "BETTER_AUTH_URL");
+  const password =
+    optional(environment, "OPENBOT_PASSWORD_SIGN_IN")?.toLowerCase() === "true";
 
-  if (!google && !microsoft && !okta) {
+  if (!google && !microsoft && !okta && !password) {
     if (secret || baseUrl) {
       throw new Error(
-        "BETTER_AUTH_SECRET or BETTER_AUTH_URL is set but no identity provider is. Configure GOOGLE_OAUTH_*, MICROSOFT_OAUTH_* or OKTA_OAUTH_*, or unset both",
+        "BETTER_AUTH_SECRET or BETTER_AUTH_URL is set but no identity provider is. Configure GOOGLE_OAUTH_*, MICROSOFT_OAUTH_* or OKTA_OAUTH_*, set OPENBOT_PASSWORD_SIGN_IN=true, or unset both",
       );
     }
     return undefined;
@@ -877,7 +889,8 @@ function authConfig(
     environment,
     "INITIAL_ADMIN_EMAILS",
   );
-  if (initialAdminEmails.length === 0) {
+  // With password accounts the first one is the administrator (auth/password.ts), so nobody has to be named here.
+  if (initialAdminEmails.length === 0 && !password) {
     throw new Error(
       "Sign-in requires INITIAL_ADMIN_EMAILS naming at least one administrator. Nothing else grants the role, and no screen can promote somebody once the deployment is running",
     );
@@ -961,6 +974,7 @@ function authConfig(
     ...(google ? { google } : {}),
     ...(microsoft ? { microsoft } : {}),
     ...(okta ? { okta } : {}),
+    ...(password ? { password } : {}),
   };
 }
 
@@ -1522,7 +1536,7 @@ export function loadConfig(
      */
     singleUser:
       !organizationAuthUrl &&
-      singleUserAllowed(environment, configuredAuthProviders(auth).length > 0),
+      singleUserAllowed(environment, signInConfigured(auth)),
     accessibility: accessibilityEnabled(environment),
     generativeUi: generativeUiEnabled(environment),
     selfHostBanner: selfHostBannerEnabled(environment),

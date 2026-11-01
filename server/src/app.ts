@@ -45,6 +45,7 @@ import {
 } from "./auth/guards";
 import type { IdentityProviderStore } from "./auth/identity-provider-store";
 import { desktopAuthPage } from "./auth/native-browser";
+import { mountPasswordRoutes, type PasswordRouteDeps } from "./auth/password";
 import {
   type BotBrowserRouteDeps,
   createBotBrowser,
@@ -96,6 +97,7 @@ import {
   createLearningRoutes,
   type LearningAdminDependencies,
 } from "./learning/routes";
+import { createLlmRoutes } from "./llm/routes";
 import {
   createPersonalLearningRoutes,
   type PersonalLearningRouteDeps,
@@ -424,6 +426,10 @@ export function createApp(
     >;
     /** Settings, Learning: who else's Bots use a person's own learned Skills. Absent, the screen has nothing to read. */
     personalLearning?: PersonalLearningRouteDeps;
+    /** Admin, Models and Admin, Usage (llm/). Absent, neither screen has anything to read. */
+    llm?: Pick<Parameters<typeof createLlmRoutes>[0], "llm" | "labels">;
+    /** Password accounts and invites (auth/password.ts), when OPENBOT_PASSWORD_SIGN_IN is on. */
+    password?: PasswordRouteDeps;
     /**
      * Shared apps: who may use an app's one team account, and the switch that makes an app Shared.
      *
@@ -533,6 +539,8 @@ export function createApp(
        * build machine cannot offer a provider that machine had never heard of.
        */
       authProviders: configuredAuthProviders(config.auth),
+      // Email and password accounts with invites (auth/password.ts).
+      passwordSignIn: config.auth?.password === true,
       /*
        * Whether any enterprise identity provider has been registered.
        *
@@ -1669,6 +1677,29 @@ export function createApp(
         requireUser,
       ),
     );
+  if (coworker?.llm)
+    app.route(
+      "/api/admin/llm",
+      createLlmRoutes({
+        ...coworker.llm,
+        requireUser,
+        trustedOrigins: [
+          ...(config.auth?.trustedOrigins ?? []),
+          ...(config.appUrl ? [config.appUrl] : []),
+        ],
+        audit: auditStore,
+      }),
+    );
+  if (coworker?.password)
+    mountPasswordRoutes(app, {
+      ...coworker.password,
+      requireUser,
+      trustedOrigins: [
+        ...(config.auth?.trustedOrigins ?? []),
+        ...(config.appUrl ? [config.appUrl] : []),
+      ],
+      audit: auditStore,
+    });
   if (coworker?.lifecycle)
     app.route(
       "/api/bots",

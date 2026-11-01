@@ -17,18 +17,37 @@ export function createModelCompleter(deps: {
   maxTokens?: number;
   /** Whether to ask for a JSON object (`response_format: json_object`). Default true, for the router. */
   json?: boolean;
+  /**
+   * Where this call goes when an admin chose a model (Admin, Models; llm/index.ts `backgroundTarget`), and how its
+   * token counts are recorded. Undefined, or a target that resolves to undefined, keeps the environment's model.
+   */
+  target?: () => Promise<
+    | {
+        baseUrl: string;
+        apiKey: string | null;
+        model: string;
+        onUsage?: (usage: { inputTokens: number; outputTokens: number }) => void;
+      }
+    | undefined
+  >;
 }): (prompt: string, signal?: AbortSignal) => Promise<string> {
   const timeoutMs = deps.timeoutMs ?? 10_000;
   return async (prompt: string, signal?: AbortSignal) => {
     signal?.throwIfAborted();
-    const key = await deps.resolveApiKey();
+    const chosen = await deps.target?.();
+    signal?.throwIfAborted();
+    const key = chosen
+      ? chosen.apiKey || "not-needed"
+      : await deps.resolveApiKey();
     signal?.throwIfAborted();
     if (!key) throw new Error("no model key");
-    const anthropic = deps.model.provider === "anthropic";
+    const anthropic = !chosen && deps.model.provider === "anthropic";
     const response = await fetch(
-      anthropic
-        ? anthropicMessagesUrl(process.env)
-        : chatCompletionsUrl(process.env),
+      chosen
+        ? `${chosen.baseUrl.replace(/\/+$/, "")}/chat/completions`
+        : anthropic
+          ? anthropicMessagesUrl(process.env)
+          : chatCompletionsUrl(process.env),
       {
         method: "POST",
         headers: {
@@ -38,7 +57,7 @@ export function createModelCompleter(deps: {
             : { authorization: `Bearer ${key}` }),
         },
         body: JSON.stringify({
-          model: deps.model.defaultModel,
+          model: chosen?.model ?? deps.model.defaultModel,
           /*
            * No temperature.
            *
@@ -70,7 +89,16 @@ export function createModelCompleter(deps: {
     const body = (await response.json()) as {
       choices?: { message?: { content?: unknown } }[];
       content?: { type?: string; text?: unknown }[];
+      usage?: { prompt_tokens?: unknown; completion_tokens?: unknown };
     };
+    if (chosen?.onUsage) {
+      const count = (value: unknown) =>
+        typeof value === "number" && Number.isFinite(value) ? value : 0;
+      chosen.onUsage({
+        inputTokens: count(body.usage?.prompt_tokens),
+        outputTokens: count(body.usage?.completion_tokens),
+      });
+    }
     const content = anthropic
       ? body.content
           ?.filter(

@@ -3,6 +3,7 @@ import { electron } from "@better-auth/electron";
 import { expo } from "@better-auth/expo";
 import { scim } from "@better-auth/scim";
 import { sso } from "@better-auth/sso";
+import { MIN_PASSWORD_LENGTH } from "@openbot/shared/llm";
 import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { genericOAuth, okta } from "better-auth/plugins";
@@ -297,6 +298,14 @@ export function createAuth(
      */
     hooks: {
       before: createAuthMiddleware(async (context) => {
+        /*
+         * Password accounts are created only with an invite, through /api/password/sign-up (auth/password.ts), which
+         * calls this endpoint from the server with no request. A browser reaching it directly is refused.
+         */
+        if (context.path === "/sign-up/email" && context.request)
+          throw new APIError("FORBIDDEN", {
+            message: "Use your invite link to create an account.",
+          });
         if (context.path !== "/sign-out" || !options.signOutRecorders) return;
         const token = await context.getSignedCookie(
           context.context.authCookies.sessionToken.name,
@@ -414,6 +423,16 @@ export function createAuth(
        */
       encryptOAuthTokens: true,
     },
+    ...(authConfig.password
+      ? {
+          emailAndPassword: {
+            enabled: true,
+            minPasswordLength: MIN_PASSWORD_LENGTH,
+            maxPasswordLength: 128,
+            autoSignIn: true,
+          },
+        }
+      : {}),
     plugins,
     socialProviders: {
       ...(authConfig.google ? { google: authConfig.google } : {}),

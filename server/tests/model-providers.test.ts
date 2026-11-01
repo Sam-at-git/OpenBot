@@ -492,6 +492,52 @@ test("json: false asks for plain text, without a response format", async () => {
   }
 });
 
+test("a chosen target replaces the environment's model and records the usage it reports", async () => {
+  const seen: { path: string; authorization: string | null; model: unknown }[] =
+    [];
+  const server = Bun.serve({
+    port: 0,
+    hostname: "127.0.0.1",
+    async fetch(request) {
+      const body = (await request.json()) as { model?: unknown };
+      seen.push({
+        path: new URL(request.url).pathname,
+        authorization: request.headers.get("authorization"),
+        model: body.model,
+      });
+      return Response.json({
+        choices: [{ message: { content: "{}" } }],
+        usage: { prompt_tokens: 21, completion_tokens: 4 },
+      });
+    },
+  });
+  try {
+    process.env.OPENAI_BASE_URL = "http://127.0.0.1:9/v1";
+    const usage: unknown[] = [];
+    const complete = createModelCompleter({
+      model: packageModel,
+      resolveApiKey: async () => null,
+      target: async () => ({
+        baseUrl: `${server.url.origin}/v1/`,
+        apiKey: null,
+        model: "deepseek-chat",
+        onUsage: (counted) => usage.push(counted),
+      }),
+    });
+    expect(await complete("Route this.")).toBe("{}");
+    expect(seen).toEqual([
+      {
+        path: "/v1/chat/completions",
+        authorization: "Bearer not-needed",
+        model: "deepseek-chat",
+      },
+    ]);
+    expect(usage).toEqual([{ inputTokens: 21, outputTokens: 4 }]);
+  } finally {
+    await server.stop(true);
+  }
+});
+
 async function bounded<T>(promise: Promise<T>, boundary: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {

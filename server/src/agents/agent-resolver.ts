@@ -4,6 +4,7 @@ import type { AuditInitiator } from "../audit";
 import type { AgentFetch, StallGuard } from "../channels/stall-guard";
 import {
   type HandoffForRun,
+  type LanguageModelForBot,
   type LoadAgentsForActor,
   type LoadAttachment,
   type LoadInstructions,
@@ -72,6 +73,8 @@ export type ActorAgentResolverDependencies = {
   markAttachmentsSentForActor?: (actorId: string) => MarkAttachmentsSent;
   acquireLearnedSkills?: AcquireLearnedSkills;
   loadPersonalMemoryForActor?: (actorId: string) => LoadPersonalMemory;
+  /** The model each built-in Bot runs on for this person, when an admin chose one (llm/). */
+  languageModelForActor?: (actorId: string) => LanguageModelForBot;
 };
 
 /**
@@ -124,6 +127,7 @@ export function createActorAgentResolver(
       deps.markAttachmentsSentForActor?.(actor.id),
       acquireForActor,
       deps.loadPersonalMemoryForActor?.(actor.id),
+      deps.languageModelForActor?.(actor.id),
     ).then((agents) => {
       const loadName = deps.loadNameForActor;
       if (loadName) {
