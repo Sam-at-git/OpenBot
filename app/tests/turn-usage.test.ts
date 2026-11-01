@@ -62,11 +62,31 @@ describe("turnUsageLabels", () => {
       [
         "a2",
         [
-          report({ runId: "tool-only", messageId: null, inputTokens: 200, outputTokens: 2 }),
-          report({ runId: "r3", messageId: "a2", inputTokens: 300, outputTokens: 3 }),
+          report({
+            runId: "tool-only",
+            messageId: null,
+            inputTokens: 200,
+            outputTokens: 2,
+          }),
+          report({
+            runId: "r3",
+            messageId: "a2",
+            inputTokens: 300,
+            outputTokens: 3,
+          }),
         ],
       ],
-      [PENDING, [report({ runId: "r9", messageId: null, inputTokens: 50, outputTokens: 5 })]],
+      [
+        PENDING,
+        [
+          report({
+            runId: "r9",
+            messageId: null,
+            inputTokens: 50,
+            outputTokens: 5,
+          }),
+        ],
+      ],
     ]);
 
     const labels = turnUsageLabels(items, reports);
