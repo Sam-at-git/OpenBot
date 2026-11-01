@@ -182,10 +182,7 @@ function ModelSections({
   return (
     <>
       {remote.length > 0 ? (
-        <p
-          className="text-amber-600 text-sm dark:text-amber-500"
-          role="status"
-        >
+        <p className="text-amber-600 text-sm dark:text-amber-500" role="status">
           {`Conversations answered by ${remote.map((provider) => provider.name).join(", ")} leave this machine.`}
         </p>
       ) : null}
@@ -741,8 +738,7 @@ function ProviderDialog({
               value={baseUrl}
             />
             <FieldDescription>
-              The OpenAI-compatible address, ending at the version, such as
-              /v1.
+              The OpenAI-compatible address, ending at the version, such as /v1.
             </FieldDescription>
           </Field>
           <Field>
@@ -795,9 +791,9 @@ function ProviderDialog({
               value={modelsText}
             />
             <FieldDescription>
-              One model per line: ID | label | input price | output price.
-              Only the ID is required. Prices are per million tokens and feed
-              the cost estimate on Usage.
+              One model per line: ID | label | input price | output price. Only
+              the ID is required. Prices are per million tokens and feed the
+              cost estimate on Usage.
             </FieldDescription>
             <div className="flex items-center gap-3">
               <Button
@@ -918,12 +914,7 @@ function ProviderDialog({
           <Button onClick={onClose} size="sm" type="button" variant="outline">
             Cancel
           </Button>
-          <Button
-            disabled={busy}
-            onClick={handleSave}
-            size="sm"
-            type="button"
-          >
+          <Button disabled={busy} onClick={handleSave} size="sm" type="button">
             {create.isPending || update.isPending ? "Saving…" : "Save"}
           </Button>
         </DialogFooter>

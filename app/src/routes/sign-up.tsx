@@ -126,8 +126,8 @@ function SignUpScreen() {
           ) : !check.data.valid ? (
             <div className="flex flex-col items-center gap-4">
               <p className="text-center text-sm text-muted-foreground">
-                This invite link isn't valid or has already been used. Ask
-                your admin for a new one.
+                This invite link isn't valid or has already been used. Ask your
+                admin for a new one.
               </p>
               <Button
                 render={(props) => <Link {...props} to="/sign" />}
