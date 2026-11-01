@@ -98,7 +98,9 @@ export function worthReading(messages: readonly Message[]): boolean {
  * The person's language, when the code can tell: mostly Chinese characters in what they wrote means Chinese. Local
  * models follow "write in the person's language" loosely and drift to English, so the prompt names it outright.
  */
-export function personLanguage(messages: readonly Message[]): string | undefined {
+export function personLanguage(
+  messages: readonly Message[],
+): string | undefined {
   const said = messages
     .filter((message) => message.role === "user")
     .map((message) => textOf(message.content))
