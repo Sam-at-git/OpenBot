@@ -306,7 +306,9 @@ const config = loadConfig();
  * would fail on this machine and could not reach a service anywhere else.
  */
 const intelligenceSettings =
-  config.runtime.mode === "intelligence" ? config.runtime.intelligence : undefined;
+  config.runtime.mode === "intelligence"
+    ? config.runtime.intelligence
+    : undefined;
 const INERT_INTELLIGENCE: IntelligenceSettings = {
   apiUrl: "http://127.0.0.1:9",
   gatewayWsUrl: "ws://127.0.0.1:9",

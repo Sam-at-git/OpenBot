@@ -1018,7 +1018,11 @@ function oktaAuth(
  */
 function runtimeCapabilities(environment: Environment): RuntimeCapabilities {
   const threads = optional(environment, "OPENBOT_THREADS")?.toLowerCase();
-  if (threads !== undefined && threads !== "local" && threads !== "intelligence")
+  if (
+    threads !== undefined &&
+    threads !== "local" &&
+    threads !== "intelligence"
+  )
     throw new Error(
       `OPENBOT_THREADS must be "local" or "intelligence", not "${threads}".`,
     );

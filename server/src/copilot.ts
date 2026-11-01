@@ -30,10 +30,10 @@ import {
 import { createIntelligenceThreadLock } from "@openbot/toolkit/copilotkit/thread-lock";
 import type { GrantedTool } from "@openbot/toolkit/granted-tool";
 import { parametersFor } from "@openbot/toolkit/granted-tool";
-import type { ThreadLock } from "@openbot/toolkit/ports";
 import { HeadlessToolsMiddleware } from "@openbot/toolkit/headless-tools";
 import { sanitizeSeededHistory } from "@openbot/toolkit/history-sanitize";
 import { executeNativeApprovalTool } from "@openbot/toolkit/native-approval";
+import type { ThreadLock } from "@openbot/toolkit/ports";
 import { historyOrEmpty } from "@openbot/toolkit/thread-history";
 import { defer, from, switchMap } from "rxjs";
 import { z } from "zod";

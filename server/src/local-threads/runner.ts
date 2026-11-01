@@ -26,6 +26,9 @@
  * which is how a local deployment runs: one `server` container. Two replicas sharing a file would
  * reset each other's running threads.
  */
+import { Database } from "bun:sqlite";
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import type {
   AbstractAgent,
   BaseEvent,
@@ -49,9 +52,6 @@ import {
   ThreadAlreadyRunningError,
   ɵresolveThreadOwner,
 } from "@copilotkit/runtime/v2";
-import { Database } from "bun:sqlite";
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
 import type { Observable } from "rxjs";
 import { ReplaySubject } from "rxjs";
 
@@ -422,7 +422,9 @@ export class LocalAgentRunner extends AgentRunner {
      * is what Intelligence did with it, and otherwise the input minus what the thread already holds.
      */
     const recordedInputMessages = (
-      request.persistedInputMessages ?? request.input.messages ?? []
+      request.persistedInputMessages ??
+      request.input.messages ??
+      []
     ).filter((message) => !historicMessageIds.has(message.id));
 
     const currentRunEvents: BaseEvent[] = [];
@@ -706,7 +708,9 @@ export class LocalAgentRunner extends AgentRunner {
     for (let index = events.length - 1; index >= 0; index--) {
       const event = events[index];
       if (event?.type === EventType.STATE_SNAPSHOT)
-        return (event as { snapshot?: Record<string, unknown> }).snapshot ?? null;
+        return (
+          (event as { snapshot?: Record<string, unknown> }).snapshot ?? null
+        );
     }
     return null;
   }
