@@ -59,7 +59,7 @@ import { readResponsibilityTurn } from "@/lib/channels/responsibility-turn";
 import { readFiring } from "@/lib/channels/routine-firing";
 import type { CardPlace } from "@/lib/copilot/carry-on";
 import { ToolPlaceContext } from "@/lib/copilot/tool-place";
-import { useTurnUsageLabels } from "@/lib/copilot/turn-usage";
+import { turnUsageLabels, useTurnUsageReports } from "@/lib/copilot/turn-usage";
 import { deploymentCapabilitiesQueryOptions } from "@/lib/deployment/queries";
 import { markdownComponents } from "@/lib/markdown";
 import { EASE_OUT, ENTRANCE_SECONDS } from "@/lib/motion";
@@ -1829,7 +1829,7 @@ export function ChatTranscript({
   working,
 }: ChatTranscriptProps) {
   const isDrawn = useDrawnTool();
-  const usageLabels = useTurnUsageLabels();
+  const usageReports = useTurnUsageReports();
   /*
    * NOT MEMOISED, AND THAT IS DELIBERATE. `useMemo` keyed on `messages` looks obviously right and
    * silently broke the transcript: the agent hands back the SAME array and mutates it, so the
@@ -1902,6 +1902,7 @@ export function ChatTranscript({
 
   /* Which tool calls are still the latest thing, for an app card: see `latestFrom`. */
   const latestIndex = latestFrom(items, { busy, queued: queued.length });
+  const usageLabels = turnUsageLabels(items, usageReports);
   /* The last thing the Bot said, so a call can tell whether its turn went on to say anything: see `ToolPlace`. */
   const lastBotWords = items.findLastIndex(
     (item) => item.kind === "text" && item.role === "assistant",

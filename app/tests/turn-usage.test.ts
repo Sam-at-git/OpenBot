@@ -37,3 +37,44 @@ describe("usageLabel", () => {
     expect(usageLabel([])).toBeUndefined();
   });
 });
+
+describe("turnUsageLabels", () => {
+  const text = (id: string, role: "user" | "assistant") => ({
+    kind: "text",
+    id,
+    role,
+  });
+
+  test("sums a whole turn, tool-only steps included, under its last reply", async () => {
+    const { turnUsageLabels, PENDING } = await import(
+      "@/lib/copilot/turn-usage"
+    );
+    const items = [
+      text("u1", "user"),
+      text("a1", "assistant"),
+      { kind: "tools", id: "t1" },
+      text("a2", "assistant"),
+      text("u2", "user"),
+      text("a3", "assistant"),
+    ];
+    const reports = new Map([
+      ["a1", [report({ messageId: "a1", inputTokens: 100, outputTokens: 1 })]],
+      [
+        "a2",
+        [
+          report({ runId: "tool-only", messageId: null, inputTokens: 200, outputTokens: 2 }),
+          report({ runId: "r3", messageId: "a2", inputTokens: 300, outputTokens: 3 }),
+        ],
+      ],
+      [PENDING, [report({ runId: "r9", messageId: null, inputTokens: 50, outputTokens: 5 })]],
+    ]);
+
+    const labels = turnUsageLabels(items, reports);
+    expect(labels.get("a1")).toBeUndefined();
+    expect(labels.get("a2")).toBe(
+      "deepseek-chat · 600 tokens in · 6 out · 3 model calls",
+    );
+    // The second turn has only the pending tool-only report so far.
+    expect(labels.get("a3")).toBe("deepseek-chat · 50 tokens in · 5 out");
+  });
+});

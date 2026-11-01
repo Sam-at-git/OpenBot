@@ -61,52 +61,92 @@ export function usageLabel(reports: readonly TurnUsage[]): string | undefined {
   return `${models} · ${number.format(input)} tokens in · ${number.format(output)} out${steps}`;
 }
 
+/** Reports by assistant message id. Reports from a run that only called tools wait under {@link PENDING}. */
+export type UsageReports = ReadonlyMap<string, readonly TurnUsage[]>;
+export const PENDING = "";
+
 /**
- * Listens for usage events on a conversation's agent and returns a label per assistant message id.
+ * Listens for usage events on a conversation's agent and collects them by assistant message id.
  *
- * Call it before the effect that connects the agent, so the events replayed for an opened conversation are heard.
- * A report is kept once however many times it is replayed: a reconnect sends the same events again.
+ * Every tool step is its own run, so one turn sends several reports. A run that only called tools has no message to
+ * hang its report on, so it is kept for the next run that does. Call this before the effect that connects the agent,
+ * so the events replayed for an opened conversation are heard. A report is kept once however many times it is
+ * replayed: a reconnect sends the same events again.
  */
-export function useTurnUsage(agent: Agent): ReadonlyMap<string, string> {
-  const [labels, setLabels] = useState<ReadonlyMap<string, string>>(
-    () => new Map(),
-  );
+export function useTurnUsage(agent: Agent): UsageReports {
+  const [reports, setReports] = useState<UsageReports>(() => new Map());
   useEffect(() => {
     const seen = new Set<string>();
     const byMessage = new Map<string, TurnUsage[]>();
-    setLabels(new Map());
+    let pending: TurnUsage[] = [];
+    setReports(new Map());
     const subscription = agent.subscribe?.({
       onCustomEvent: ({ event }) => {
         if (event.name !== USAGE_EVENT) return;
         const usage = readUsage(event.value);
-        if (!usage?.messageId) return;
+        if (!usage) return;
         const key = JSON.stringify(usage);
         if (seen.has(key)) return;
         seen.add(key);
-        byMessage.set(usage.messageId, [
-          ...(byMessage.get(usage.messageId) ?? []),
-          usage,
-        ]);
-        setLabels(
-          new Map(
-            [...byMessage].flatMap(([id, reports]) => {
-              const label = usageLabel(reports);
-              return label ? [[id, label] as const] : [];
-            }),
-          ),
-        );
+        if (!usage.messageId) {
+          pending = [...pending, usage];
+        } else {
+          byMessage.set(usage.messageId, [
+            ...(byMessage.get(usage.messageId) ?? []),
+            ...pending,
+            usage,
+          ]);
+          pending = [];
+        }
+        const next = new Map<string, readonly TurnUsage[]>(byMessage);
+        if (pending.length > 0) next.set(PENDING, pending);
+        setReports(next);
       },
     });
     return () => subscription?.unsubscribe();
   }, [agent]);
+  return reports;
+}
+
+/**
+ * The usage line for each turn, keyed by the turn's last assistant message.
+ *
+ * A turn runs from one of the person's messages to the next. Everything the Bot used in between is summed, and the
+ * line goes under the last thing it said, which is where a person looks for the end of an answer.
+ */
+export function turnUsageLabels(
+  items: readonly { kind: string; id: string; role?: string }[],
+  reports: UsageReports,
+): ReadonlyMap<string, string> {
+  const labels = new Map<string, string>();
+  let turn: TurnUsage[] = [];
+  let lastReply: string | undefined;
+  const close = () => {
+    const label = lastReply ? usageLabel(turn) : undefined;
+    if (lastReply && label) labels.set(lastReply, label);
+    turn = [];
+    lastReply = undefined;
+  };
+  for (const item of items) {
+    if (item.kind !== "text") continue;
+    if (item.role === "user") {
+      close();
+      continue;
+    }
+    if (item.role !== "assistant") continue;
+    lastReply = item.id;
+    turn = [...turn, ...(reports.get(item.id) ?? [])];
+  }
+  turn = [...turn, ...(reports.get(PENDING) ?? [])];
+  close();
   return labels;
 }
 
-const TurnUsageContext = createContext<ReadonlyMap<string, string>>(new Map());
+const TurnUsageContext = createContext<UsageReports>(new Map());
 
 export const TurnUsageProvider = TurnUsageContext.Provider;
 
-/** The usage line for each assistant message id in the conversation on screen, if any. */
-export function useTurnUsageLabels(): ReadonlyMap<string, string> {
+/** The usage reports of the conversation on screen, by assistant message id. */
+export function useTurnUsageReports(): UsageReports {
   return useContext(TurnUsageContext);
 }

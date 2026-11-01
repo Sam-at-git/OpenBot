@@ -339,7 +339,7 @@ export function ChannelChat({
   });
   useEffect(() => observeApprovalAgent(agent), [agent]);
   // Before the connect effect below, so usage replayed for an opened conversation is heard.
-  const usageLabels = useTurnUsage(agent);
+  const usageReports = useTurnUsage(agent);
 
   /**
    * First-message seed from the compose screen. It is taken once per mount and retained until the
@@ -1022,7 +1022,7 @@ export function ChannelChat({
       agentId={channelAgentId}
       threadId={channel.threadId}
     >
-      <TurnUsageProvider value={usageLabels}>
+      <TurnUsageProvider value={usageReports}>
         <ConversationProvider ask={askFromComponent}>
           <div className="relative isolate flex min-h-0 min-w-0 flex-1 flex-col">
             <VoiceCallWidget
