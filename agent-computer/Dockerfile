@@ -95,6 +95,11 @@ from paddleocr import PaddleOCR, PPStructureV3; \
 PaddleOCR(lang='ch'); \
 PPStructureV3()" \
   && rm -rf /root/.cache
+# The fonts PaddleX draws its saved results with, which it otherwise downloads on first save.
+RUN /opt/python/bin/python -c "\
+from paddlex.utils import fonts; \
+[getattr(fonts, name).path for name in dir(fonts) if name.endswith('_FONT')]" \
+  && ls /opt/paddlex/fonts
 
 WORKDIR /app
 # The lockfile as well as the manifest: `--frozen-lockfile` with no lockfile present resolves afresh
