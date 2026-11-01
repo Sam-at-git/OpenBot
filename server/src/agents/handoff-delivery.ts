@@ -40,9 +40,18 @@ export type ThreadRunner = {
     input: unknown;
     /** What the conversation keeps, when that is not the whole of what the model was sent. */
     persistedInputMessages?: readonly unknown[];
+    /**
+     * The person this conversation belongs to. The local runner checks it against the thread's owner;
+     * the platform runner ignores it, because the lock already carries the person.
+     */
+    ownerId?: string;
   }) => Observable<BaseEvent>;
   /** Stop a run in flight, as a pause does for every other turn. */
-  stop?: (input: { threadId: string; runId: string }) => Promise<unknown>;
+  stop?: (input: {
+    threadId: string;
+    runId: string;
+    ownerId?: string;
+  }) => Promise<unknown>;
 };
 
 export function createHandoffDelivery(options: {
@@ -359,6 +368,7 @@ export function createHandoffDelivery(options: {
           await settled(
             runner.run({
               threadId: where.threadId,
+              ownerId: work.actorId,
               agent,
               /*
                * What the conversation KEEPS, which is not what the model was sent.
@@ -408,7 +418,11 @@ export function createHandoffDelivery(options: {
             AbortSignal.any([paused, lockLost.signal]),
             () => {
               void runner
-                .stop?.({ threadId: where.threadId, runId })
+                .stop?.({
+                  threadId: where.threadId,
+                  runId,
+                  ownerId: work.actorId,
+                })
                 .catch(() => undefined);
             },
             () =>

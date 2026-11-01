@@ -52,7 +52,11 @@ FROM oven/bun:1.4.3 AS runtime
 # Not root. The API opens a socket and talks to Postgres; neither needs privileges, and a Chromium
 # container is a separate image with its own reasons.
 RUN groupadd --system --gid 1001 openbot \
-  && useradd --system --uid 1001 --gid openbot openbot
+  && useradd --system --uid 1001 --gid openbot openbot \
+  # Where local conversations are kept (OPENBOT_THREADS=local). Owned by the runtime user so a fresh
+  # named volume mounted here starts writable: Docker copies this directory's ownership into it.
+  && mkdir -p /data \
+  && chown openbot:openbot /data
 
 WORKDIR /app
 
@@ -70,6 +74,8 @@ COPY --from=deps /app/worker/node_modules worker/node_modules
 
 COPY server server
 COPY shared shared
+# The egress rules the server imports from agent-computer (server/src/computer/policy-network.ts).
+COPY agent-computer/src/egress.ts agent-computer/src/egress.ts
 COPY toolkit toolkit
 COPY examples examples
 # Its source and manifest, not its tests. Run it with `bun ../worker/src/index.ts` from the working

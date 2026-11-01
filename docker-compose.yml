@@ -173,6 +173,9 @@ services:
         target: /openbot
         bind:
           create_host_path: false
+      # Local conversations (OPENBOT_THREADS=local, OPENBOT_THREADS_DB=/data/...): one SQLite file,
+      # kept across rebuilds. Empty and unused when conversations are kept in Intelligence.
+      - openbot-threads:/data
     ports:
       # Two host ports, one process. The app's is the address a window is given: the server serves
       # the built app itself, so that one port reaches both halves on one origin. The server's is
@@ -576,3 +579,4 @@ volumes:
   spire-agent-socket:
   spire-agent-data:
   agent-profiles:
+  openbot-threads:

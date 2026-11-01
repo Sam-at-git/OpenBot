@@ -6,8 +6,10 @@ import type {
   GetTrajectoryLearningContainerIds,
 } from "@copilotkit/runtime/v2";
 import {
+  type AgentRunner,
   type CopilotKitIntelligence,
   CopilotRuntime,
+  IntelligenceAgentRunner,
 } from "@copilotkit/runtime/v2";
 import { createCopilotHonoHandler } from "@copilotkit/runtime/v2/hono";
 import {
@@ -28,6 +30,7 @@ import {
 import { createIntelligenceThreadLock } from "@openbot/toolkit/copilotkit/thread-lock";
 import type { GrantedTool } from "@openbot/toolkit/granted-tool";
 import { parametersFor } from "@openbot/toolkit/granted-tool";
+import type { ThreadLock } from "@openbot/toolkit/ports";
 import { HeadlessToolsMiddleware } from "@openbot/toolkit/headless-tools";
 import { sanitizeSeededHistory } from "@openbot/toolkit/history-sanitize";
 import { executeNativeApprovalTool } from "@openbot/toolkit/native-approval";
@@ -66,6 +69,7 @@ import {
   type PersonalSkillSources,
 } from "./learning/runtime";
 import type { LearningSettingsStore } from "./learning/settings";
+import { localThreads } from "./local-threads/client";
 import {
   type LoadPersonalMemory,
   PersonalMemoryMiddleware,
@@ -1748,6 +1752,30 @@ export function generativeUiMiddlewares(enabled: boolean) {
   return { generativeUI: enabled, a2ui: { enabled: false } } as const;
 }
 
+/** What mounting the runtime hands back: the endpoint, and what a hop and a headless turn need beside it. */
+export type MountedCopilotRuntime = {
+  handler: ReturnType<typeof createCopilotHonoHandler>;
+  /** Learning, when this deployment has it. Never in local mode: Learning is a service of Intelligence. */
+  learning: LearningRuntime | undefined;
+  /**
+   * The runner a hop runs the addressed Bot through. A fresh platform runner in Intelligence mode,
+   * built from the client's own connection (see below); in local mode the one runner every chat uses,
+   * because it holds the live runs and the locks.
+   */
+  handoffRunner: () => AgentRunner;
+  threadLock: ThreadLock;
+  agentFor: (input: {
+    actor: AgentActor;
+    botId: string;
+    initiator?: AuditInitiator;
+  }) => Promise<AbstractAgent | null>;
+  /** A thread's messages, as the store a person's run writes to holds them. */
+  history: (input: {
+    threadId: string;
+    actorId: string;
+  }) => Promise<readonly unknown[]>;
+};
+
 /**
  * Mount the CopilotKit endpoint onto the host Hono app.
  *
@@ -1780,8 +1808,7 @@ export function mountCopilotRuntime(
       selectLearningContainers: GetTrajectoryLearningContainerIds;
     };
   } = {},
-) {
-  const { intelligence } = config.runtime;
+): MountedCopilotRuntime {
   const {
     basePath = "/api/copilotkit",
     onRunBusy,
@@ -1822,6 +1849,45 @@ export function mountCopilotRuntime(
       throw error;
     }
   };
+
+  /*
+   * LOCAL CONVERSATIONS: the runtime's own SSE mode, with no Intelligence anywhere.
+   *
+   * A run executes in this process through the local runner, its events stream back on the run
+   * request, and the thread is kept in the local SQLite file. The runner enforces thread owners, so
+   * `identifyUser` still scopes every thread to the person whose request created it. Learning and the
+   * Recorder's capture pass are not mounted: both are Intelligence services.
+   */
+  if (config.runtime.mode === "local") {
+    const { runner, client } = localThreads(config.runtime.local.dbPath);
+    const runtime = new CopilotRuntime({
+      identifyUser,
+      runner,
+      telemetryProperties: {
+        ...(config.accessibility ? { accessibility_title: "OpenBot" } : {}),
+        ...desktopTelemetryProperties(),
+      },
+      ...(config.generativeUi ? { openGenerativeUI: true } : {}),
+      ...generativeUiMiddlewares(config.generativeUi),
+      agents: createRequestAgents(identifyActor, resolver) as never,
+    });
+    return {
+      handler: createCopilotHonoHandler({ runtime, basePath }),
+      learning: undefined,
+      handoffRunner: () => runner,
+      threadLock: createIntelligenceThreadLock({ client, onRunBusy }),
+      agentFor,
+      history: async (input) =>
+        (
+          await client.getThreadMessages({
+            threadId: input.threadId,
+            userId: input.actorId,
+          })
+        ).messages,
+    };
+  }
+
+  const { intelligence } = config.runtime;
 
   /*
    * One client, used by the runtime and by anything reading a thread beside it, so a hop reads the
@@ -1916,7 +1982,7 @@ export function mountCopilotRuntime(
     }),
     learning,
     /**
-     * How to reach the platform's runner, exactly as the runtime reaches it.
+     * A runner that reaches the platform exactly as the runtime reaches it.
      *
      * TAKEN FROM THE CLIENT, NOT FROM CONFIGURATION, and this is the whole of a bug that only a real
      * gateway could show. Built from `gatewayWsUrl` and the deployment's API key, every join was
@@ -1924,10 +1990,11 @@ export function mountCopilotRuntime(
      * the token that holds it is not the API key. The runtime asks the client for both, so anything
      * else driving a run has to ask the same client the same way.
      */
-    runnerConnection: () => ({
-      url: intelligenceClient.ɵgetRunnerWsUrl(),
-      authToken: intelligenceClient.ɵgetRunnerAuthToken(),
-    }),
+    handoffRunner: () =>
+      new IntelligenceAgentRunner({
+        url: intelligenceClient.ɵgetRunnerWsUrl(),
+        authToken: intelligenceClient.ɵgetRunnerAuthToken(),
+      }),
     threadLock: createIntelligenceThreadLock({
       client: intelligenceClient,
       learning,

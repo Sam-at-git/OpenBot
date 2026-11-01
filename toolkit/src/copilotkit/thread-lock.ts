@@ -13,14 +13,43 @@ import type { ThreadLock } from "../ports";
  */
 export const THREAD_LOCK_TTL_SECONDS = 120;
 
-/** The four platform calls the lock makes, and nothing else of the client. */
-export type ThreadLockClient = Pick<
-  CopilotKitIntelligence,
-  | "getOrCreateThread"
-  | "ɵacquireThreadLock"
-  | "ɵrenewThreadLock"
-  | "ɵcleanupThreadLock"
->;
+/**
+ * The four platform calls the lock makes, and nothing else of the client.
+ *
+ * Stated by shape rather than picked from `CopilotKitIntelligence`, so the local thread client
+ * (server/src/local-threads/client.ts) can stand in for it: the same calls, kept on this machine.
+ * The real client satisfies this; the assertion below keeps it that way.
+ */
+export type ThreadLockClient = {
+  getOrCreateThread(params: {
+    threadId: string;
+    userId: string;
+    agentId: string;
+    learningContainerId?: string;
+  }): Promise<unknown>;
+  ɵacquireThreadLock(params: {
+    threadId: string;
+    runId: string;
+    userId: string;
+    agentId: string;
+    learningContainerId?: string;
+  }): Promise<{ runId: string }>;
+  ɵrenewThreadLock(params: {
+    threadId: string;
+    runId: string;
+    ttlSeconds: number;
+  }): Promise<unknown>;
+  ɵcleanupThreadLock(params: {
+    threadId: string;
+    runId: string;
+  }): Promise<unknown>;
+};
+
+/** Fails to compile if the platform client stops satisfying {@link ThreadLockClient}. */
+export type ɵIntelligenceIsAThreadLockClient =
+  CopilotKitIntelligence extends ThreadLockClient ? true : never;
+const ɵintelligenceIsAThreadLockClient: ɵIntelligenceIsAThreadLockClient = true;
+void ɵintelligenceIsAThreadLockClient;
 
 /**
  * The conversation's run lock, as the platform issues it.

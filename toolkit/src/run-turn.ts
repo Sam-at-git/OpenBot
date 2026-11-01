@@ -169,10 +169,13 @@ export type RunnerLike = {
     agent: AbstractAgent;
     input: RunAgentInput;
     persistedInputMessages?: Message[];
+    /** The turn's owner. The local runner checks it against the thread's; the platform runner ignores it. */
+    ownerId?: string;
   }): EventStream;
   stop(request: {
     threadId: string;
     runId?: string;
+    ownerId?: string;
   }): Promise<boolean | undefined>;
 };
 
@@ -793,7 +796,9 @@ export function createTurnRunner(options: {
         // it sets `stopRequested`, which is what makes `finalizeRunEvents` close the run as
         // stopped rather than leaving it open for ever on the platform.
       }
-      stopPromise ??= runner.stop({ threadId, runId }).catch(() => undefined);
+      stopPromise ??= runner
+        .stop({ threadId, runId, ownerId: ownerUserId })
+        .catch(() => undefined);
     };
 
     const lease = await takeLease({
@@ -828,7 +833,13 @@ export function createTurnRunner(options: {
       const completed = new Promise<void>((resolve, reject) => {
         let terminal: Error | undefined;
         runner
-          .run({ threadId, agent, input, persistedInputMessages })
+          .run({
+            threadId,
+            agent,
+            input,
+            persistedInputMessages,
+            ownerId: ownerUserId,
+          })
           .subscribe({
             /*
              * RUN_ERROR THROUGH `next` IS TERMINAL. The Intelligence runner reports a failed run by

@@ -27,10 +27,28 @@ import type { BrokerProvider } from "./plugins/access";
 import { type VoiceConfig, voiceConfig } from "./voice/config";
 import { type WebBotAuth, webBotAuthFromEnv } from "./web-bot-auth";
 
-export type RuntimeCapabilities = {
-  mode: "intelligence";
-  durableHistory: true;
-  intelligence: IntelligenceSettings;
+export type RuntimeCapabilities =
+  | {
+      mode: "intelligence";
+      durableHistory: true;
+      intelligence: IntelligenceSettings;
+    }
+  | {
+      /**
+       * Conversations kept on this machine, with no CopilotKit Intelligence (`OPENBOT_THREADS=local`).
+       * Runs execute in this process and their events and messages are kept in one SQLite file. See
+       * local-threads/runner.ts. Learning, the Recorder and Intelligence memory are off in this mode,
+       * because each of them is a service of Intelligence.
+       */
+      mode: "local";
+      durableHistory: true;
+      intelligence?: undefined;
+      local: LocalThreadSettings;
+    };
+
+export type LocalThreadSettings = {
+  /** The SQLite file conversations are kept in (`OPENBOT_THREADS_DB`). */
+  dbPath: string;
 };
 
 /**
@@ -999,6 +1017,27 @@ function oktaAuth(
  * deployment sets one, which is what a self-hosted Intelligence with its own licence needs.
  */
 function runtimeCapabilities(environment: Environment): RuntimeCapabilities {
+  const threads = optional(environment, "OPENBOT_THREADS")?.toLowerCase();
+  if (threads !== undefined && threads !== "local" && threads !== "intelligence")
+    throw new Error(
+      `OPENBOT_THREADS must be "local" or "intelligence", not "${threads}".`,
+    );
+  /*
+   * Local conversations: nothing below is required, and nothing below is read. A deployment that
+   * asked for local threads and still has Intelligence values in its environment gets local threads;
+   * the values are ignored rather than half-used.
+   */
+  if (threads === "local")
+    return {
+      mode: "local",
+      durableHistory: true,
+      local: {
+        dbPath:
+          optional(environment, "OPENBOT_THREADS_DB") ??
+          "./data/openbot-threads.sqlite",
+      },
+    };
+
   const settings = {
     apiUrl: url(environment, "INTELLIGENCE_API_URL"),
     gatewayWsUrl: url(environment, "INTELLIGENCE_GATEWAY_WS_URL"),
