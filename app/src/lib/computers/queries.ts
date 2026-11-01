@@ -1,3 +1,4 @@
+import type { ComputerSecret } from "@openbot/shared/llm";
 import { queryOptions } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 
@@ -73,7 +74,19 @@ export const computerKeys = {
   fleet: () => ["computers", "fleet"] as const,
   policy: () => ["computers", "policy"] as const,
   status: (botId: string) => ["computers", "status", botId] as const,
+  secrets: () => ["computers", "secrets"] as const,
 };
+
+/** Admin, Computers: the secrets Bots' commands get as environment variables. Names and scopes only, never values. */
+export function computerSecretsQueryOptions() {
+  return queryOptions({
+    queryKey: computerKeys.secrets(),
+    queryFn: (): Promise<ComputerSecret[]> =>
+      client("/api/admin/computer-secrets", "secrets", {
+        fallback: "Couldn't load computer secrets.",
+      }),
+  });
+}
 
 /**
  * One Bot's computer's state, read without waking it.

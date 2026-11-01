@@ -1,6 +1,7 @@
 import {
   classifyAttachment,
   MAX_ATTACHMENTS_PER_MESSAGE,
+  MAX_COMPUTER_FILE_BYTES,
   MAX_FILE_BYTES,
   MAX_IMAGE_BYTES,
   namesNoFormat,
@@ -833,6 +834,19 @@ export function createChannelAttachmentRoutes(
           error: `'${name}' is larger than the ${megabytes(
             MAX_IMAGE_BYTES,
           )} limit for images.`,
+        },
+        413,
+      );
+    }
+
+    // A file for the Bot's computer (a PDF). With this kind a staged row can reach 25 MiB, so the
+    // 32-row backstop above bounds staged blobs at 800 MiB per person rather than 256 MiB.
+    if (kind === "file" && bytes.byteLength > MAX_COMPUTER_FILE_BYTES) {
+      return context.json(
+        {
+          error: `'${name}' is larger than the ${megabytes(
+            MAX_COMPUTER_FILE_BYTES,
+          )} limit for PDFs.`,
         },
         413,
       );

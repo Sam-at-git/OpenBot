@@ -6,6 +6,7 @@
  * path to `shared/` is written down once rather than in every composer file that needs it.
  */
 export {
+  ACCEPTED_COMPUTER_FILE_MIME,
   ACCEPTED_IMAGE_MIME,
   ACCEPTED_TEXT_MIME,
   type AttachmentKind,
@@ -14,6 +15,7 @@ export {
   attachmentUrl,
   classifyAttachment,
   MAX_ATTACHMENTS_PER_MESSAGE,
+  MAX_COMPUTER_FILE_BYTES,
   MAX_EXTRACTED_CHARACTERS,
   MAX_FILE_BYTES,
   MAX_IMAGE_BYTES,

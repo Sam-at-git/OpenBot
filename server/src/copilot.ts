@@ -12,6 +12,7 @@ import {
   IntelligenceAgentRunner,
 } from "@copilotkit/runtime/v2";
 import { createCopilotHonoHandler } from "@copilotkit/runtime/v2/hono";
+import { computerUploadPath } from "@openbot/shared/attachments";
 import {
   type ComputerGuidance,
   PROVENANCE_GUIDANCE,
@@ -51,8 +52,10 @@ import type { AgentActor } from "./agents/profile-types";
 import type { AuditInitiator } from "./audit";
 import {
   attachmentIdsIn,
+  type ComputerFileNote,
   newInlineBudget,
   resolveAttachmentParts,
+  savedOnComputerNote,
   type StoredAttachment,
 } from "./channels/attachment-parts";
 import type { AgentFetch, StallGuard } from "./channels/stall-guard";
@@ -597,6 +600,7 @@ export async function buildAgents(
   acquireLearnedSkills?: AcquireLearnedSkills,
   loadPersonalMemory?: LoadPersonalMemory,
   languageModelFor?: LanguageModelForBot,
+  stageAttachments?: StageAttachmentsForBot,
 ): Promise<Record<string, AbstractAgent>> {
   let vendors: readonly string[] = [];
   try {
@@ -654,6 +658,7 @@ export async function buildAgents(
           markAttachmentsSent,
           acquireLearnedSkills,
           languageModelFor,
+          stageAttachments,
         );
         if (loadPersonalMemory)
           built.use(new PersonalMemoryMiddleware(agent.id, loadPersonalMemory));
@@ -807,12 +812,34 @@ async function inlineAttachments(
    */
   threadId: string,
   markSent?: MarkAttachmentsSent,
+  stage?: StageAttachments,
 ): Promise<Message[]> {
   const asked = messages.reduce(
     (latest, message, index) => (message.role === "user" ? index : latest),
     -1,
   );
   const budget = newInlineBudget();
+  /*
+   * The asked message's files go into the Bot's computer first, so the note a PDF becomes can say
+   * where it is. A failure to save is told to the model rather than failing the turn. Files from
+   * earlier messages were saved when those were asked, at the same path.
+   */
+  const askedIds = new Set(
+    asked >= 0 ? attachmentIdsIn(messages[asked]?.content) : [],
+  );
+  const staged: ReadonlyMap<string, string> =
+    stage && askedIds.size > 0
+      ? await stage(threadId, [...askedIds]).catch(() => new Map())
+      : new Map();
+  const computerFile: ComputerFileNote | undefined = stage
+    ? (id, file) => {
+        const path = staged.get(id);
+        if (path) return savedOnComputerNote(file, path);
+        if (askedIds.has(id))
+          return `The person attached "${file.name}", but it couldn't be saved to your computer. Tell them, and ask them to try again.`;
+        return savedOnComputerNote(file, computerUploadPath(file.name));
+      }
+    : undefined;
   const inlined = [...messages];
   /**
    * The ids to stamp once the whole walk has come back, or none.
@@ -837,6 +864,7 @@ async function inlineAttachments(
       (id) => load(id, threadId),
       index === asked ? "fail" : "note",
       budget,
+      computerFile,
     );
     /*
      * AND THIS IS WHERE `attachedAt` IS WRITTEN, for the asked message alone.
@@ -917,6 +945,7 @@ async function buildAgent(
   markAttachmentsSent?: MarkAttachmentsSent,
   acquireLearnedSkills?: AcquireLearnedSkills,
   languageModelFor?: LanguageModelForBot,
+  stageAttachments?: StageAttachmentsForBot,
 ): Promise<AbstractAgent> {
   if (agent.type === "unavailable") {
     return new UnavailableAgent(agent);
@@ -926,6 +955,9 @@ async function buildAgent(
   // The admin's choice of model for this Bot, if any. A desktop plan, below, still comes first.
   const chosenModel =
     agent.type === "built_in" ? await languageModelFor?.(agent.id) : undefined;
+  // Where this person's attached files go in this Bot's computer, when it has one.
+  const stage =
+    agent.type === "built_in" ? await stageAttachments?.(agent.id) : undefined;
 
   /*
    * Whether narrowing can do anything here at all.
@@ -1067,6 +1099,7 @@ async function buildAgent(
                   loadAttachment,
                   threadId,
                   markAttachmentsSent,
+                  stage,
                 ),
             }
           : {}),
@@ -1665,6 +1698,7 @@ export async function resolveRuntimeAgents(
   acquireLearnedSkills?: AcquireLearnedSkills,
   loadPersonalMemory?: LoadPersonalMemory,
   languageModelFor?: LanguageModelForBot,
+  stageAttachments?: StageAttachmentsForBot,
 ): Promise<Record<string, AbstractAgent>> {
   const all = await loadAgents();
   if (all.length === 0) {
@@ -1702,6 +1736,7 @@ export async function resolveRuntimeAgents(
     acquireLearnedSkills,
     loadPersonalMemory,
     languageModelFor,
+    stageAttachments,
   );
 }
 
@@ -1716,6 +1751,21 @@ export type LoadToolsForBot = (botId: string) => Promise<GrantedTool[]>;
 export type LanguageModelForBot = (
   botId: string,
 ) => Promise<PlanLanguageModel | undefined>;
+
+/**
+ * Save the files attached to the message being asked about into the Bot's computer, before the model runs, and say
+ * which landed where (`uploads/<name>` in its home folder). A file for the computer (a PDF) is then described to the
+ * model by that path instead of being inlined.
+ */
+export type StageAttachments = (
+  threadId: string,
+  attachmentIds: readonly string[],
+) => Promise<ReadonlyMap<string, string>>;
+
+/** How one built-in Bot stages files for this person, or undefined when it has no computer. */
+export type StageAttachmentsForBot = (
+  botId: string,
+) => Promise<StageAttachments | undefined>;
 
 /**
  * The deployment's signed statement of what a run is, for the agent that will run it.

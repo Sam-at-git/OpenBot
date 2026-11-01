@@ -128,6 +128,28 @@ export const ACCEPTED_TEXT_MIME = [
 ] as const;
 
 /**
+ * Files a model cannot read directly but a Bot's computer can: they are saved into the Bot's computer
+ * (`uploads/` in its home folder) for a skill's script to open, and the model is told where. Only a
+ * Bot with a computer can use one.
+ */
+export const ACCEPTED_COMPUTER_FILE_MIME = ["application/pdf"] as const;
+
+/** Largest computer file (a PDF) one attachment may be. The computer itself takes up to 32 MiB. */
+export const MAX_COMPUTER_FILE_BYTES = 25 * 1024 * 1024;
+
+/** Where an attached file is saved in a Bot's computer, relative to its home folder. */
+export function computerUploadPath(name: string): string {
+  const safe =
+    name
+      .normalize("NFC")
+      .replace(/[\\/\u0000-\u001f\u007f]+/g, "_")
+      .replace(/^\.+/, "")
+      .trim()
+      .slice(0, 180) || "file";
+  return `uploads/${safe}`;
+}
+
+/**
  * THE MEDIA TYPE ON ITS OWN: LOWER CASE, PARAMETERS GONE — AND THE ONLY FORM ANYTHING HERE COMPARES.
  *
  * A `File`'s type is whatever produced it. Bun's constructor appends `;charset=utf-8` to
@@ -172,6 +194,8 @@ export function namesNoFormat(mimeType: string): boolean {
 export type AttachmentKind =
   | "image"
   | "text"
+  /** A file for the Bot's computer (ACCEPTED_COMPUTER_FILE_MIME). */
+  | "file"
   | "unsupported-image"
   | "unsupported";
 
@@ -202,6 +226,9 @@ export function classifyAttachment(mimeType: string): AttachmentKind {
   if (mediaType.startsWith("image/")) return "unsupported-image";
   if ((ACCEPTED_TEXT_MIME as readonly string[]).includes(mediaType)) {
     return "text";
+  }
+  if ((ACCEPTED_COMPUTER_FILE_MIME as readonly string[]).includes(mediaType)) {
+    return "file";
   }
   return "unsupported";
 }

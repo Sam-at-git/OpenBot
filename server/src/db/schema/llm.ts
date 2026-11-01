@@ -7,6 +7,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { users } from "./core";
 import { jsonb } from "./json";
@@ -78,3 +79,31 @@ export const passwordInvites = pgTable("password_invites", {
   usedBy: text("used_by").references(() => users.id, { onDelete: "set null" }),
   usedAt: timestamp("used_at", { withTimezone: true }),
 });
+
+/**
+ * A secret an admin gives the Bots' computers as an environment variable (Admin, Computers), such as an API key a
+ * skill's script reads. Encrypted with KEY_ENCRYPTION_KEY. `scope` is `*` for every Bot or one Bot's ID; a Bot's own
+ * value wins over the one for every Bot. A command gets the values only when it runs (computer/gateway.ts), and the
+ * computer masks them in what the command prints.
+ */
+export const computerSecrets = pgTable(
+  "computer_secrets",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    scope: text("scope").notNull().default("*"),
+    encryptedValue: text("encrypted_value").notNull(),
+    createdBy: text("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("computer_secrets_name_scope_key").on(table.name, table.scope),
+  ],
+);

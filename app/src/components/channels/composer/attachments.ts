@@ -1,8 +1,10 @@
 import type { AttachmentsConfig } from "@copilotkit/react-core/v2";
 import {
+  ACCEPTED_COMPUTER_FILE_MIME,
   ACCEPTED_IMAGE_MIME,
   ACCEPTED_TEXT_MIME,
   attachmentUrl,
+  MAX_COMPUTER_FILE_BYTES,
   MAX_IMAGE_BYTES,
 } from "@/lib/channels/attachments";
 
@@ -161,6 +163,7 @@ function isUploadedAttachment(body: unknown): body is UploadedAttachment {
 export const FILE_PICKER_ACCEPT = [
   ...ACCEPTED_IMAGE_MIME,
   ...ACCEPTED_TEXT_MIME,
+  ...ACCEPTED_COMPUTER_FILE_MIME,
   ".png",
   ".jpg",
   ".jpeg",
@@ -170,6 +173,7 @@ export const FILE_PICKER_ACCEPT = [
   ".md",
   ".csv",
   ".json",
+  ".pdf",
 ].join(",");
 
 /**
@@ -238,7 +242,9 @@ export function attachmentsConfigFor(
   return {
     enabled: true,
     accept: "*/*",
-    maxSize: MAX_IMAGE_BYTES,
+    // The largest ceiling of any kind (a PDF for the Bot's computer); `screenPickedFiles` holds each
+    // kind to its own.
+    maxSize: Math.max(MAX_IMAGE_BYTES, MAX_COMPUTER_FILE_BYTES),
     onUpload: async (file) => {
       const uploaded = await upload(file);
       const rowId = stagedRowId(uploaded);

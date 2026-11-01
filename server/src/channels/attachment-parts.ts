@@ -359,6 +359,7 @@ async function resolvePart(
   load: (id: string) => Promise<StoredAttachment | null>,
   onMissing: MissingAttachment,
   budget: InlineBudget | undefined,
+  computerFile?: ComputerFileNote,
 ): Promise<unknown> {
   /*
    * CUT BEFORE THE LOAD, NOT AFTER IT. The read out of `bytea` is most of what
@@ -430,6 +431,14 @@ async function resolvePart(
       `Attachment ${namedForFailure(part, id)} could not be loaded: it may have been deleted, or it may belong to another channel or to somebody whose files you cannot see.`,
     );
   }
+
+  // A file for the Bot's computer is never inlined, so it costs the run's budget nothing: the model
+  // is told where it is (or that this Bot cannot open it) instead of being sent its bytes.
+  if (classifyAttachment(attachment.mimeType) === "file")
+    return {
+      type: "text",
+      text: (computerFile ?? noComputerNote)(id, attachment),
+    };
 
   if (budget) {
     /*
@@ -570,11 +579,33 @@ async function resolvePart(
  * exists to bound. Trading a rare second read for unbounded buffer retention is
  * the wrong way round.
  */
+/** What the model is told about a file for the Bot's computer (a PDF): where it is, or why it isn't there. */
+export type ComputerFileNote = (id: string, file: StoredAttachment) => string;
+
+const sizeOf = (bytes: number) =>
+  bytes >= 1024 * 1024
+    ? `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+    : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+
+/** For a Bot with no computer: the file exists, and this Bot cannot open it. */
+export const noComputerNote: ComputerFileNote = (_id, file) =>
+  `The person attached "${file.name}" (${file.mimeType}, ${sizeOf(file.bytes.length)}). You can't read this kind of file directly and you have no computer to open it on, so tell them that.`;
+
+/** For a Bot whose computer holds the file at `path` (relative to its home folder). */
+export function savedOnComputerNote(
+  file: StoredAttachment,
+  path: string,
+): string {
+  return `The person attached "${file.name}" (${file.mimeType}, ${sizeOf(file.bytes.length)}). It is not shown to you as text. It is saved on your computer at ~/${path} (the path ${path} relative to your home folder, where your commands start); open it there with your computer's tools.`;
+}
+
 export async function resolveAttachmentParts(
   content: unknown,
   load: (id: string) => Promise<StoredAttachment | null>,
   onMissing: MissingAttachment = "fail",
   budget?: InlineBudget,
+  /** How a file for the Bot's computer is described. Absent: as one this Bot has no computer for. */
+  computerFile?: ComputerFileNote,
 ): Promise<unknown> {
   if (!Array.isArray(content)) return content;
 
@@ -602,6 +633,7 @@ export async function resolveAttachmentParts(
             loadOnce,
             onMissing,
             budget,
+            computerFile,
           ),
     );
   }

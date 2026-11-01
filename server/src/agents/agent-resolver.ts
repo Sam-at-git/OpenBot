@@ -13,6 +13,7 @@ import {
   type RuntimeModel,
   resolveRuntimeAgents,
   type SignRun,
+  type StageAttachmentsForBot,
   type ToolSelection,
 } from "../copilot";
 import type { AcquireLearnedSkills } from "../learning/runtime";
@@ -75,6 +76,8 @@ export type ActorAgentResolverDependencies = {
   loadPersonalMemoryForActor?: (actorId: string) => LoadPersonalMemory;
   /** The model each built-in Bot runs on for this person, when an admin chose one (llm/). */
   languageModelForActor?: (actorId: string) => LanguageModelForBot;
+  /** Where this person's attached files go in each built-in Bot's computer (index.ts). */
+  stageAttachmentsForActor?: (actorId: string) => StageAttachmentsForBot;
 };
 
 /**
@@ -128,6 +131,7 @@ export function createActorAgentResolver(
       acquireForActor,
       deps.loadPersonalMemoryForActor?.(actor.id),
       deps.languageModelForActor?.(actor.id),
+      deps.stageAttachmentsForActor?.(actor.id),
     ).then((agents) => {
       const loadName = deps.loadNameForActor;
       if (loadName) {

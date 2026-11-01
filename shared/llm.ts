@@ -194,3 +194,16 @@ export type PasswordInvite = {
 };
 
 export const MIN_PASSWORD_LENGTH = 8;
+
+// ---------------------------------------------------------------------------------------------
+// Computer secrets (Admin, Computers)
+
+/** A secret the Bots' computers get as an environment variable. The value is never sent to a browser. */
+export type ComputerSecret = {
+  id: string;
+  /** The environment variable, e.g. `LLAMA_CLOUD_API_KEY`. */
+  name: string;
+  /** The one Bot it is for, or null for every Bot. A Bot's own value wins over the one for every Bot. */
+  agentId: string | null;
+  updatedAt: string;
+};

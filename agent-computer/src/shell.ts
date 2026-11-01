@@ -149,6 +149,50 @@ const NEVER_PASSED = new Set([
   "PS4",
 ]);
 
+/** Names the computer sets itself, which a secret must not replace. */
+const RESERVED_FOR_COMPUTER = new Set(["PATH", "HOME", "PWD", "SHELL", "USER"]);
+
+/**
+ * Secrets the OpenBot server hands one command as environment variables (an admin's computer secrets,
+ * server/src/computer/secrets.ts). Only real variable names with text values; the names that change
+ * how bash starts, and the ones the computer sets itself, are refused.
+ */
+export function secretEnvironment(raw: unknown): Record<string, string> {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const env: Record<string, string> = {};
+  for (const [name, value] of Object.entries(raw)) {
+    if (
+      typeof value !== "string" ||
+      !ENV_NAME.test(name) ||
+      NEVER_PASSED.has(name) ||
+      RESERVED_FOR_COMPUTER.has(name) ||
+      name.startsWith("EGRESS_") ||
+      /_PROXY$/i.test(name)
+    )
+      continue;
+    env[name] = value;
+  }
+  return env;
+}
+
+/**
+ * Output with every secret value replaced by its name, so a command that prints a key (`env`, `echo
+ * $KEY`, a script's debug line) does not hand it to the model. Values shorter than four characters
+ * are left alone: masking them would garble ordinary output and protect nothing.
+ */
+export function maskSecrets(
+  text: string,
+  secrets: Record<string, string>,
+): string {
+  let masked = text;
+  const entries = Object.entries(secrets)
+    .filter(([, value]) => value.length >= 4)
+    .sort(([, a], [, b]) => b.length - a.length);
+  for (const [name, value] of entries)
+    masked = masked.split(value).join(`[secret ${name}]`);
+  return masked;
+}
+
 function extraShellEnvNames(raw: string | undefined): readonly string[] {
   if (raw === undefined || raw.trim() === "") return [];
   const named = raw.split(",").map((name) => name.trim());
@@ -216,6 +260,8 @@ export function createShell(
       command: string;
       timeoutMs?: number;
       signal?: AbortSignal;
+      /** Secrets for this command only (`secretEnvironment`), masked again in what it prints. */
+      env?: Record<string, string>;
     }): Promise<ShellResult> {
       const started = Date.now();
       /*
@@ -268,6 +314,7 @@ export function createShell(
         // The egress filter's address last, so a command cannot be pointed around it.
         env: {
           ...environmentForCommand(sourceEnv, workspaceDir),
+          ...(input.env ?? {}),
           ...egressShellEnvironment(),
         },
         detached: true,
@@ -352,8 +399,9 @@ export function createShell(
       clearTimeout(timer);
       input.signal?.removeEventListener("abort", onAbort);
 
-      const out = clamp(outBuffer.text);
-      const err = clamp(errBuffer.text);
+      const secrets = input.env ?? {};
+      const out = clamp(maskSecrets(outBuffer.text, secrets));
+      const err = clamp(maskSecrets(errBuffer.text, secrets));
       return {
         command: input.command,
         exitCode,

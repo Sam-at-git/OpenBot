@@ -134,6 +134,12 @@ export type ActionActor = {
 };
 
 export type ComputerGatewayOptions = {
+  /**
+   * An admin's computer secrets for one Bot, as environment variables for the commands it runs
+   * (computer/secrets.ts). Added to `/exec` after the policy decision and the audit row, so neither
+   * sees a value, and masked again in the output by the computer.
+   */
+  secretsFor?: (botId: string) => Promise<Record<string, string>>;
   approvalGate?: ApprovalGate;
   provider: ComputerProvider;
   auditStore: AuditStore;
@@ -263,6 +269,12 @@ export interface ComputerGateway {
     actor: ActionActor,
     input: WriteFileInput,
   ): Promise<WriteFileResult>;
+  /** A file's raw bytes, into the seat's workspace: an attached document, for a skill's script to open. */
+  uploadFile(
+    seat: ComputerSeat,
+    actor: ActionActor,
+    input: { path: string; bytes: Uint8Array },
+  ): Promise<{ path: string; bytes: number }>;
   control(seat: ComputerSeat, requestId?: string): Promise<ControlState>;
   /** `source` is `manual` for a person taking the wheel themselves; the Bot's own requests are `model`. */
   requestHelp(
@@ -1474,14 +1486,16 @@ export function createComputerGateway(
         seat,
         actor,
         { command: input.command, ...(caller ? { signal: caller } : {}) },
-        () =>
-          post<RunCommandResult>(
+        async () => {
+          const env = (await options.secretsFor?.(seat.botId)) ?? {};
+          return post<RunCommandResult>(
             seat,
             "/exec",
-            input,
+            Object.keys(env).length > 0 ? { ...input, env } : input,
             caller,
             COMMAND_BACKSTOP_MS,
-          ),
+          );
+        },
       ).then((result) =>
         // What a command prints can be anything it fetched, so the output is marked.
         withUntrustedNotice(result, "command output", ["stdout", "stderr"]),
@@ -1495,6 +1509,25 @@ export function createComputerGateway(
         actor,
         { filePath: input.path },
         () => post<WriteFileResult>(seat, "/files/write", input),
+      );
+    },
+
+    uploadFile(
+      seat: ComputerSeat,
+      actor: ActionActor,
+      input: { path: string; bytes: Uint8Array },
+    ) {
+      // Governed as a write: a policy that keeps a Bot from writing files keeps attachments out too.
+      return govern(
+        "computer_write_file",
+        seat,
+        actor,
+        { filePath: input.path },
+        () =>
+          post<{ path: string; bytes: number }>(seat, "/files/upload", {
+            path: input.path,
+            base64: Buffer.from(input.bytes).toString("base64"),
+          }),
       );
     },
   };

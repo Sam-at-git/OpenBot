@@ -351,8 +351,31 @@ export function createWorkspace(
       });
       return { path: requested, bytes, appended: options.append === true };
     },
+
+    /**
+     * Write a file's raw bytes: a PDF or a spreadsheet a person attached in a conversation, put where a
+     * skill's script can open it. Its own limit, `uploadBytes`, since these are documents and not text a
+     * Bot wrote.
+     */
+    async upload(
+      requested: string,
+      contents: Uint8Array,
+    ): Promise<{ path: string; bytes: number }> {
+      if (contents.byteLength > UPLOAD_BYTES) {
+        throw new WorkspaceFileTooLargeError(
+          `That is ${contents.byteLength} bytes and the limit is ${UPLOAD_BYTES}.`,
+        );
+      }
+      const full = await resolvePath(requested, true);
+      await mkdir(dirname(full), { recursive: true });
+      await writeFile(full, contents);
+      return { path: requested, bytes: contents.byteLength };
+    },
   };
 }
+
+/** Most bytes one uploaded file may have (an attached document; see `upload`). */
+export const UPLOAD_BYTES = 32 * 1024 * 1024;
 
 export type Workspace = ReturnType<typeof createWorkspace>;
 

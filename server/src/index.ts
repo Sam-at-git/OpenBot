@@ -3,6 +3,7 @@ import {
   CopilotKitIntelligence,
   IntelligenceAgentRunner,
 } from "@copilotkit/runtime/v2";
+import { computerUploadPath } from "@openbot/shared/attachments";
 import { computerGuidance } from "@openbot/shared/bot-prompt";
 import { isPersonBrowserId } from "@openbot/shared/openbot-browser";
 import { workOwner } from "@openbot/shared/work-owner";
@@ -79,6 +80,7 @@ import { createIdentityProviderStore } from "./auth/identity-provider-store";
 import { createOrganizationAuth } from "./auth/organization";
 import { organizationUserStore } from "./auth/organization-store";
 import { ensureBootstrapInvite } from "./auth/password";
+import { createComputerSecretStore } from "./computer/secrets";
 import { openbotAddress } from "./browser/address";
 import { botBrowserNetwork } from "./browser/bot-browser";
 import { personBrowserEgressPolicy } from "./browser/egress";
@@ -141,6 +143,7 @@ import {
   mountCopilotRuntime,
   normalizeModelBaseUrls,
   runtimeModelForEnvironment,
+  type StageAttachmentsForBot,
   type ToolSelection,
 } from "./copilot";
 import {
@@ -926,9 +929,16 @@ const computerSeats = computerProvider
     })
   : undefined;
 
+/** Admin, Computers: environment variables an admin gives the commands Bots run (computer/secrets.ts). */
+const computerSecretStore = createComputerSecretStore(
+  database,
+  config.keyEncryptionKey,
+);
+
 const computerGateway = computerProvider
   ? createComputerGateway({
       provider: computerProvider,
+      secretsFor: (botId) => computerSecretStore.secretsFor(botId),
       ...(computerSeats ? { seats: computerSeats } : {}),
       // Who each person's computer belongs to, for the admin list.
       people: async (ids) =>
@@ -1704,6 +1714,50 @@ const loadAttachmentForActor =
     loadAttachmentForTurn(database, { actorId, threadId }, id);
 
 /**
+ * Attached files into a Bot's computer (`uploads/<name>` in its home folder), before its run, so a skill's script can
+ * open a PDF the model cannot read. Only for a Bot this person may use a computer with; the write is governed and
+ * audited as a file write. The computer is only located once there is something to save.
+ */
+const stageAttachmentsForActor =
+  (actorId: string): StageAttachmentsForBot =>
+  async (botId) => {
+    if (!computerGateway) return undefined;
+    const actor = await actorFor(actorId);
+    if (!canUseComputer(await agentProfileStore.get(actor, botId), actor))
+      return undefined;
+    return async (threadId, ids) => {
+      const saved = new Map<string, string>();
+      const seat = await computerGateway.seatFor(botId, actor.id);
+      for (const id of ids) {
+        const file = await loadAttachmentForTurn(
+          database,
+          { actorId, threadId },
+          id,
+        );
+        if (!file) continue;
+        const path = computerUploadPath(file.name);
+        try {
+          await computerGateway.uploadFile(
+            seat,
+            { id: actor.id, userId: actor.id },
+            { path, bytes: file.bytes },
+          );
+          saved.set(id, path);
+        } catch (error) {
+          console.error(
+            JSON.stringify({
+              type: "attachment-to-computer-failed",
+              botId,
+              errorType: error instanceof Error ? error.name : typeof error,
+            }),
+          );
+        }
+      }
+      return saved;
+    };
+  };
+
+/**
  * That the files on a message went out in it, recorded when a turn turns out to be a send.
  *
  * Bound per actor and handed to the same two turn paths as the reader above, so a routine's send at
@@ -1987,6 +2041,7 @@ const actorAgentResolver = createActorAgentResolver({
   },
   loadPersonalMemoryForActor,
   languageModelForActor: (actorId) => llmService.languageModelForActor(actorId),
+  stageAttachmentsForActor,
 });
 
 const copilotRuntime = mountCopilotRuntime(
@@ -2869,6 +2924,7 @@ const app = createApp(
           },
         }
       : {}),
+    computerSecrets: computerSecretStore,
     llm: {
       llm: llmService,
       labels: async () => {

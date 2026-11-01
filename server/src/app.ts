@@ -1,4 +1,7 @@
-import { MAX_IMAGE_BYTES } from "@openbot/shared/attachments";
+import {
+  MAX_COMPUTER_FILE_BYTES,
+  MAX_IMAGE_BYTES,
+} from "@openbot/shared/attachments";
 import type { Hono as HonoApp, MiddlewareHandler } from "hono";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -46,6 +49,10 @@ import {
 import type { IdentityProviderStore } from "./auth/identity-provider-store";
 import { desktopAuthPage } from "./auth/native-browser";
 import { mountPasswordRoutes, type PasswordRouteDeps } from "./auth/password";
+import {
+  type ComputerSecretStore,
+  createComputerSecretRoutes,
+} from "./computer/secrets";
 import {
   type BotBrowserRouteDeps,
   createBotBrowser,
@@ -195,7 +202,8 @@ const MULTIPART_FRAMING_ALLOWANCE = 64 * 1024;
  * door exists to stop is the 2GB body, and it still does.
  */
 export const UPLOAD_BODY_LIMIT_BYTES =
-  MAX_IMAGE_BYTES + MULTIPART_FRAMING_ALLOWANCE;
+  Math.max(MAX_IMAGE_BYTES, MAX_COMPUTER_FILE_BYTES) +
+  MULTIPART_FRAMING_ALLOWANCE;
 
 /**
  * One row for something an administrator did to somebody's access.
@@ -426,6 +434,8 @@ export function createApp(
     >;
     /** Settings, Learning: who else's Bots use a person's own learned Skills. Absent, the screen has nothing to read. */
     personalLearning?: PersonalLearningRouteDeps;
+    /** Admin, Computers: secrets the Bots' commands get as environment variables (computer/secrets.ts). */
+    computerSecrets?: ComputerSecretStore;
     /** Admin, Models and Admin, Usage (llm/). Absent, neither screen has anything to read. */
     llm?: Pick<Parameters<typeof createLlmRoutes>[0], "llm" | "labels">;
     /** Password accounts and invites (auth/password.ts), when OPENBOT_PASSWORD_SIGN_IN is on. */
@@ -1682,6 +1692,19 @@ export function createApp(
       "/api/admin/llm",
       createLlmRoutes({
         ...coworker.llm,
+        requireUser,
+        trustedOrigins: [
+          ...(config.auth?.trustedOrigins ?? []),
+          ...(config.appUrl ? [config.appUrl] : []),
+        ],
+        audit: auditStore,
+      }),
+    );
+  if (coworker?.computerSecrets)
+    app.route(
+      "/api/admin/computer-secrets",
+      createComputerSecretRoutes({
+        store: coworker.computerSecrets,
         requireUser,
         trustedOrigins: [
           ...(config.auth?.trustedOrigins ?? []),

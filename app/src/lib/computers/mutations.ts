@@ -69,3 +69,37 @@ export function saveActionPolicyMutationOptions(queryClient: QueryClient) {
     onSuccess: () => invalidateComputers(queryClient),
   });
 }
+
+const SECRET_FALLBACK = "Couldn't save the computer secret. Try again.";
+
+/** Add a computer secret, or replace the value of the one with the same name and Bot. */
+export function putComputerSecretMutationOptions(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: async (input: {
+      name: string;
+      value: string;
+      agentId: string | null;
+    }): Promise<void> => {
+      await client("/api/admin/computer-secrets", {
+        method: "PUT",
+        body: input,
+        fallback: SECRET_FALLBACK,
+      });
+    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: computerKeys.secrets() }),
+  });
+}
+
+export function deleteComputerSecretMutationOptions(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: async (id: string): Promise<void> => {
+      await client(`/api/admin/computer-secrets/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        fallback: "Couldn't remove the computer secret. Try again.",
+      });
+    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: computerKeys.secrets() }),
+  });
+}

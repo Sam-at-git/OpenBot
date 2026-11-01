@@ -498,6 +498,13 @@
       "when": 1793522081370,
       "tag": "0070_llm_settings_and_password_invites",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1793528406388,
+      "tag": "0071_computer_secrets",
+      "breakpoints": true
     }
   ]
 }

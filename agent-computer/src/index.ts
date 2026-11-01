@@ -72,6 +72,7 @@ import {
   unmarkPersonFilled,
 } from "./secret-masking";
 import { type BotSession, createSessions } from "./sessions";
+import { secretEnvironment } from "./shell";
 import {
   fillSignIn,
   fillSignInCode,
@@ -1535,10 +1536,13 @@ serve<StreamData>({
         const body = (await request.json().catch(() => null)) as {
           command?: unknown;
           timeoutMs?: unknown;
+          env?: unknown;
         } | null;
         if (typeof body?.command !== "string" || !body.command.trim()) {
           return json({ error: "A command is required." }, 400);
         }
+        // An admin's computer secrets for this Bot, added by the server after policy and audit.
+        const env = secretEnvironment(body.env);
         const timeout = parseExecTimeout(body.timeoutMs);
         if (!timeout.ok) {
           return json({ error: timeout.error }, 400);
@@ -1554,12 +1558,36 @@ serve<StreamData>({
                 ? { timeoutMs: timeout.timeoutMs }
                 : {}),
               signal: request.signal,
+              env,
             }),
           );
         } catch (error) {
           return json(
             { error: describe(error, "The command could not be run.") },
             500,
+          );
+        }
+      }
+
+      // A file's raw bytes, sent base64 in JSON: an attached document the server puts in the Bot's
+      // `uploads/` folder before its run (server/src/computer/gateway.ts `uploadFile`).
+      if (url.pathname === "/files/upload" && request.method === "POST") {
+        const body = (await request.json().catch(() => null)) as {
+          path?: unknown;
+          base64?: unknown;
+        } | null;
+        if (typeof body?.path !== "string" || typeof body.base64 !== "string") {
+          return json({ error: "A path and the file's contents are required." }, 400);
+        }
+        try {
+          const { files } = await workspaces.for(botId);
+          return json(
+            await files.upload(body.path, Buffer.from(body.base64, "base64")),
+          );
+        } catch (error) {
+          return json(
+            { error: describe(error, "The file could not be written.") },
+            fileStatus(error),
           );
         }
       }

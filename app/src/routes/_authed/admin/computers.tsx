@@ -12,6 +12,7 @@ import {
   PageSection,
   PageShell,
 } from "@/components/layout/page-shell";
+import { ComputerSecretsSection } from "@/components/admin/computer-secrets";
 import { StaggerItem } from "@/components/layout/stagger";
 import { Button } from "@/components/ui/button";
 import {
@@ -277,6 +278,8 @@ function ComputersPage() {
           </PageRows>
         )}
       </PageSection>
+
+      <ComputerSecretsSection />
 
       {/*
        * A DIALOG RATHER THAN AN INLINE CONFIRM. Resetting signs a Bot out of everything it has ever
