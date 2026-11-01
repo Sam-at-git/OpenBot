@@ -4,7 +4,10 @@ import {
   FILE_PICKER_ACCEPT,
   uploadToChannel,
 } from "@/components/channels/composer/attachments";
-import { MAX_IMAGE_BYTES } from "@/lib/channels/attachments";
+import {
+  MAX_COMPUTER_FILE_BYTES,
+  MAX_IMAGE_BYTES,
+} from "@/lib/channels/attachments";
 
 /**
  * `uploadToChannel` is the SDK's `onUpload`, called with a raw `File`; `attachmentsConfigFor`
@@ -173,14 +176,16 @@ describe("uploadToChannel", () => {
 });
 
 describe("attachmentsConfigFor", () => {
-  test("maxSize is MAX_IMAGE_BYTES", () => {
+  test("maxSize is the largest ceiling of any kind (a PDF for the Bot's computer)", () => {
     const config = attachmentsConfigFor(
       "chan_1",
       "group_1",
       () => {},
       () => {},
     );
-    expect(config.maxSize).toBe(MAX_IMAGE_BYTES);
+    expect(config.maxSize).toBe(
+      Math.max(MAX_IMAGE_BYTES, MAX_COMPUTER_FILE_BYTES),
+    );
   });
 
   /**
