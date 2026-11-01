@@ -955,9 +955,9 @@ async function buildAgent(
   // The admin's choice of model for this Bot, if any. A desktop plan, below, still comes first.
   const chosenModel =
     agent.type === "built_in" ? await languageModelFor?.(agent.id) : undefined;
-  // Where this person's attached files go in this Bot's computer, when it has one.
-  const stage =
-    agent.type === "built_in" ? await stageAttachments?.(agent.id) : undefined;
+  // Where this person's attached files go in this Bot's computer, when it has one. A Bot this
+  // deployment runs at the managed endpoint uses the same computer through its tool callback.
+  const stage = await stageAttachments?.(agent.id);
 
   /*
    * Whether narrowing can do anything here at all.
@@ -1055,6 +1055,7 @@ async function buildAgent(
       acquireLearnedSkills,
       handoff,
       initiator,
+      stage,
     );
   }
 
@@ -1369,6 +1370,8 @@ function remoteAgentWithStandingRole(
   acquireLearnedSkills?: AcquireLearnedSkills,
   coordination?: HandoffForRun,
   initiator?: AuditInitiator,
+  /** Where attached files go in this Bot's computer, as for a built-in Bot. */
+  stage?: StageAttachments,
 ) {
   /*
    * What this Bot holds, as a second standing message.
@@ -1490,6 +1493,7 @@ function remoteAgentWithStandingRole(
             // The conversation this run is in, which is what decides whose files it may reach.
             input.threadId,
             markAttachmentsSent,
+            stage,
           )
         : Promise.resolve(history),
     ).pipe(
