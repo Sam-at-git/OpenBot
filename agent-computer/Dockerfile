@@ -100,6 +100,8 @@ RUN /opt/python/bin/python -c "\
 from paddlex.utils import fonts; \
 [getattr(fonts, name).path for name in dir(fonts) if name.endswith('_FONT')]" \
   && ls /opt/paddlex/fonts
+# The paddleocr CLI also writes a Word copy of a PP-StructureV3 result and stops without this.
+RUN /opt/python/bin/pip install --no-cache-dir python-docx==1.2.0 && rm -rf /root/.cache
 
 WORKDIR /app
 # The lockfile as well as the manifest: `--frozen-lockfile` with no lockfile present resolves afresh
