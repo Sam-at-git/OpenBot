@@ -103,6 +103,7 @@ import {
   type Turn,
   turnsOf,
 } from "./transcript-turns";
+import { useTurnUsageLabels } from "@/lib/copilot/turn-usage";
 import { ToolLine } from "./tool-line";
 import { VoiceChatCard } from "./voice-chat-card";
 
@@ -710,9 +711,12 @@ const TranscriptMessage = memo(function TranscriptMessage({
   role,
   streaming = false,
   text,
+  usage,
 }: {
   commandNames?: string;
   role: "user" | "assistant";
+  /** The model and tokens of the turn this reply ended, e.g. "deepseek-chat · 12,345 tokens in · 678 out". */
+  usage?: string;
   /* This is the Bot's reply still being written: the last row of a turn in flight. */
   streaming?: boolean;
   text: string;
@@ -808,6 +812,11 @@ const TranscriptMessage = memo(function TranscriptMessage({
               )}
             </BubbleContent>
           </Bubble>
+          {usage && !isUser && (
+            <p className="mt-1 px-1 text-muted-foreground text-xs tabular-nums">
+              {usage}
+            </p>
+          )}
         </Arriving>
       </MessageContent>
     </MessageRow>
@@ -1820,6 +1829,7 @@ export function ChatTranscript({
   working,
 }: ChatTranscriptProps) {
   const isDrawn = useDrawnTool();
+  const usageLabels = useTurnUsageLabels();
   /*
    * NOT MEMOISED, AND THAT IS DELIBERATE. `useMemo` keyed on `messages` looks obviously right and
    * silently broke the transcript: the agent hands back the SAME array and mutates it, so the
@@ -2163,6 +2173,9 @@ export function ChatTranscript({
             busy && item.role === "assistant" && index === items.length - 1
           }
           text={item.text}
+          {...(item.role === "assistant" && usageLabels.get(item.id)
+            ? { usage: usageLabels.get(item.id) }
+            : {})}
         />
       </MessageScrollerItem>
     ) : item.kind === "attachments" ? (

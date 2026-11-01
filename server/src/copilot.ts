@@ -1,5 +1,5 @@
 import type { Message, RunAgentInput } from "@ag-ui/client";
-import { type AbstractAgent, HttpAgent } from "@ag-ui/client";
+import { type AbstractAgent, type BaseEvent, HttpAgent } from "@ag-ui/client";
 import type {
   BuiltInAgentConfiguration,
   CopilotRuntimeHooks,
@@ -36,7 +36,7 @@ import { sanitizeSeededHistory } from "@openbot/toolkit/history-sanitize";
 import { executeNativeApprovalTool } from "@openbot/toolkit/native-approval";
 import type { ThreadLock } from "@openbot/toolkit/ports";
 import { historyOrEmpty } from "@openbot/toolkit/thread-history";
-import { defer, from, switchMap } from "rxjs";
+import { defer, from, type Observable, switchMap } from "rxjs";
 import { z } from "zod";
 import {
   type ActorAgentResolver,
@@ -61,6 +61,7 @@ import {
 import type { AgentFetch, StallGuard } from "./channels/stall-guard";
 import type { DeploymentConfig } from "./config";
 import { observeModelConnection } from "./desktop-connection-failure";
+import { runUsage } from "./llm/run-usage";
 import { desktopTelemetryProperties } from "./desktop-telemetry";
 import { observeIntelligenceAuthentication } from "./intelligence-client";
 import { RemoteLearnedSkillsMiddleware } from "./learning/remote";
@@ -953,8 +954,11 @@ async function buildAgent(
 
   const granted = await loadTools(agent.id);
   // The admin's choice of model for this Bot, if any. A desktop plan, below, still comes first.
-  const chosenModel =
+  const adminModel =
     agent.type === "built_in" ? await languageModelFor?.(agent.id) : undefined;
+  // Counted per run as well, so the reply can show the model and tokens of its own turn.
+  const usage = adminModel ? runUsage(adminModel) : undefined;
+  const chosenModel = usage?.model;
   // Where this person's attached files go in this Bot's computer, when it has one. A Bot this
   // deployment runs at the managed endpoint uses the same computer through its tool callback.
   const stage = await stageAttachments?.(agent.id);
@@ -1091,7 +1095,10 @@ async function buildAgent(
         learnedSkills,
       ),
       {
-        observe: observeModelConnection,
+        observe: usage
+          ? (stream: Observable<BaseEvent>) =>
+              usage.observe(observeModelConnection(stream))
+          : observeModelConnection,
         ...(loadAttachment
           ? {
               inline: (messages: AgentRunInput["messages"], threadId: string) =>

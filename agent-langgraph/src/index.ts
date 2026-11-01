@@ -414,6 +414,7 @@ async function runAgent(input: RunAgentInput): Promise<Response> {
           ),
         input,
         send,
+        MODEL,
       );
 
       controller.close();

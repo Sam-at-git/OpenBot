@@ -49,6 +49,8 @@ export async function streamRun(
   makeEvents: () => Promise<AsyncIterable<RunStreamEvent>>,
   input: Pick<RunAgentInput, "runId" | "threadId">,
   send: (event: BaseEvent) => void,
+  /** The model this run used, reported with its token counts in an `openbot.usage` event. */
+  model?: string,
 ): Promise<void> {
   /*
    * One message id per stretch of prose.
@@ -78,6 +80,10 @@ export async function streamRun(
    */
   let sentVisibleText = false;
   let sentToolCall = false;
+  /** Tokens across every model call in this run (a tool loop calls the model once per step). */
+  const usage = { inputTokens: 0, outputTokens: 0, calls: 0, reported: false };
+  /** The last message that carried prose, which is where the surface shows the usage line. */
+  let lastTextMessageId: string | undefined;
 
   try {
     const events = await makeEvents();
@@ -118,11 +124,19 @@ export async function streamRun(
           delta: text,
         } as BaseEvent);
         sentVisibleText = true;
+        lastTextMessageId = messageId;
       }
 
       if (event.event === "on_chat_model_end") {
         const output = event.data?.output as AIMessage | undefined;
         if (output) {
+          usage.calls += 1;
+          const counted = output.usage_metadata;
+          if (counted) {
+            usage.reported = true;
+            usage.inputTokens += counted.input_tokens ?? 0;
+            usage.outputTokens += counted.output_tokens ?? 0;
+          }
           for (const call of output.tool_calls ?? []) {
             pending.set(call.id ?? call.name, {
               name: call.name,
@@ -221,6 +235,22 @@ export async function streamRun(
         delta: EMPTY_REPLY_FALLBACK,
       } as BaseEvent);
       send({ type: "TEXT_MESSAGE_END", messageId } as BaseEvent);
+      lastTextMessageId = messageId;
+    }
+
+    if (model && usage.calls > 0) {
+      send({
+        type: "CUSTOM",
+        name: "openbot.usage",
+        value: {
+          runId: input.runId,
+          messageId: lastTextMessageId ?? null,
+          model,
+          calls: usage.calls,
+          inputTokens: usage.reported ? usage.inputTokens : null,
+          outputTokens: usage.reported ? usage.outputTokens : null,
+        },
+      } as BaseEvent);
     }
 
     send({

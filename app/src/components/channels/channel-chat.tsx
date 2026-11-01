@@ -55,6 +55,7 @@ import {
   voiceArchiveContext,
   withVoiceChats,
 } from "@/lib/voice/archive";
+import { TurnUsageProvider, useTurnUsage } from "@/lib/copilot/turn-usage";
 import { useVoiceCall } from "@/lib/voice/use-voice-call";
 import { queryClient } from "@/query-client";
 import { newId } from "../../lib/new-id";
@@ -337,6 +338,8 @@ export function ChannelChat({
     ],
   });
   useEffect(() => observeApprovalAgent(agent), [agent]);
+  // Before the connect effect below, so usage replayed for an opened conversation is heard.
+  const usageLabels = useTurnUsage(agent);
 
   /**
    * First-message seed from the compose screen. It is taken once per mount and retained until the
@@ -1019,6 +1022,7 @@ export function ChannelChat({
       agentId={channelAgentId}
       threadId={channel.threadId}
     >
+      <TurnUsageProvider value={usageLabels}>
       <ConversationProvider ask={askFromComponent}>
         <div className="relative isolate flex min-h-0 min-w-0 flex-1 flex-col">
           <VoiceCallWidget
@@ -1187,6 +1191,7 @@ export function ChannelChat({
           />
         </div>
       </ConversationProvider>
+      </TurnUsageProvider>
     </CopilotChatConfigurationProvider>
   );
 }

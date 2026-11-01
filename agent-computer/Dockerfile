@@ -131,6 +131,10 @@ ENV OPENBOT_RECORDER_DIR=/recorder
 RUN mkdir -p /workspace
 ENV WORKSPACE_DIR=/workspace
 
+# A Bot's commands get only allow-listed variables (shell.ts `environmentForCommand`), so these two
+# are named here or PaddleOCR looks for its models in the Bot's own HOME and downloads them again.
+ENV COMPUTER_SHELL_ENV=PADDLE_PDX_CACHE_HOME,PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK
+
 ENV PORT=4100
 EXPOSE 4100
 # Readiness is exposed through Docker health so the supervisor need not know the network route.

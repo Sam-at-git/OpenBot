@@ -296,3 +296,70 @@ describe("a failure mid-stream", () => {
     expect(sent[0]).toMatchObject({ message: "could not build graph" });
   });
 });
+
+describe("the usage a run reports", () => {
+  async function collectWithModel(events: RunStreamEvent[]) {
+    const sent: Array<Record<string, unknown>> = [];
+    await streamRun(
+      async () =>
+        (async function* () {
+          for (const event of events) yield event;
+        })(),
+      RUN,
+      (event) => sent.push(event as unknown as Record<string, unknown>),
+      "deepseek-chat",
+    );
+    return sent;
+  }
+  const modelEnd = (input: number, output: number): RunStreamEvent => ({
+    event: "on_chat_model_end",
+    data: {
+      output: {
+        tool_calls: [],
+        usage_metadata: {
+          input_tokens: input,
+          output_tokens: output,
+          total_tokens: input + output,
+        },
+      },
+    },
+  });
+
+  test("every model call in the run is summed into one event before RUN_FINISHED", async () => {
+    const sent = await collectWithModel([
+      modelEnd(1000, 20),
+      modelStream("答案"),
+      modelEnd(1500, 30),
+    ]);
+
+    expect(types(sent).slice(-2)).toEqual(["CUSTOM", "RUN_FINISHED"]);
+    expect(sent.at(-2)).toMatchObject({
+      name: "openbot.usage",
+      value: {
+        runId: "run_1",
+        messageId: "msg_run_1_0",
+        model: "deepseek-chat",
+        calls: 2,
+        inputTokens: 2500,
+        outputTokens: 50,
+      },
+    });
+  });
+
+  test("a provider that reports no usage gives null counts, not zero", async () => {
+    const sent = await collectWithModel([
+      modelStream("答案"),
+      { event: "on_chat_model_end", data: { output: { tool_calls: [] } } },
+    ]);
+
+    expect(sent.at(-2)).toMatchObject({
+      name: "openbot.usage",
+      value: { calls: 1, inputTokens: null, outputTokens: null },
+    });
+  });
+
+  test("without a model name nothing extra is sent", async () => {
+    const sent = await collect([modelStream("答案"), modelEnd(10, 2)]);
+    expect(types(sent)).not.toContain("CUSTOM");
+  });
+});
