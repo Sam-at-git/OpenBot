@@ -146,7 +146,7 @@ function harness(options: {
       input: { runId: string; messages: { id: string }[] };
       persistedInputMessages?: { id: string; content?: unknown }[];
     }[],
-    stops: [] as { threadId: string; runId?: string }[],
+    stops: [] as { threadId: string; runId?: string; ownerId?: string }[],
   };
 
   const agent = new FakeAgent({ agentId: AGENT_ID });
@@ -780,7 +780,9 @@ describe("one run id, everywhere", () => {
     await expect(run()).rejects.toThrow("could not be stopped");
 
     const runId = calls.acquired[0]?.runId;
-    expect(calls.stops).toEqual([{ threadId: THREAD_ID, runId }]);
+    expect(calls.stops).toEqual([
+      { threadId: THREAD_ID, runId, ownerId: OWNER },
+    ]);
   });
 
   test("stops the run exactly once when the heartbeat rejects and the deadline also fires", async () => {
@@ -821,7 +823,11 @@ describe("a heartbeat refused as a conflict stops the turn", () => {
 
     expect(agent.aborts).toBe(1);
     expect(calls.stops).toEqual([
-      { threadId: THREAD_ID, runId: calls.acquired[0]?.runId },
+      {
+        threadId: THREAD_ID,
+        runId: calls.acquired[0]?.runId,
+        ownerId: OWNER,
+      },
     ]);
   });
 
