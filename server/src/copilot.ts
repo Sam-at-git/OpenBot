@@ -1863,6 +1863,16 @@ export function mountCopilotRuntime(
     const runtime = new CopilotRuntime({
       identifyUser,
       runner,
+      /*
+       * UNDER BUN'S IDLE LIMIT. In this mode the run request IS the stream, and `Bun.serve` closes a
+       * connection that has sent nothing for its default `idleTimeout` of 10 s, checked on a coarse
+       * timer, so in practice anything past about 8 s. A model choosing tools or thinking before its
+       * first word is silent that long, and the browser then saw RUN_STARTED and nothing else while
+       * the run finished and was stored behind it. The runtime's default comment every 15 s is too
+       * slow for that; one every 5 s keeps the connection open. (Intelligence mode answers the run
+       * request in a second and streams over the gateway, so it never met this.)
+       */
+      sseKeepAliveIntervalSeconds: 5,
       telemetryProperties: {
         ...(config.accessibility ? { accessibility_title: "OpenBot" } : {}),
         ...desktopTelemetryProperties(),
