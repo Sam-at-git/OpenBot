@@ -464,39 +464,29 @@ test("the production selector speaks native Anthropic and rereads its key", asyn
   }
 });
 
-test("a JSON Schema is sent as response_format, and an endpoint that refuses it is asked again in JSON mode", async () => {
+test("json: false asks for plain text, without a response format", async () => {
   const formats: unknown[] = [];
-  let refuse = false;
   const server = Bun.serve({
     port: 0,
     hostname: "127.0.0.1",
     async fetch(request) {
-      const body = (await request.json()) as { response_format?: unknown };
-      formats.push(body.response_format);
-      const format = body.response_format as { type?: string } | undefined;
-      if (refuse && format?.type === "json_schema")
-        return new Response("unsupported", { status: 400 });
-      return Response.json({
-        choices: [{ message: { content: '{"skills":[]}' } }],
-      });
+      const body = (await request.json()) as Record<string, unknown>;
+      formats.push("response_format" in body ? body.response_format : "none");
+      return Response.json({ choices: [{ message: { content: "<none/>" } }] });
     },
   });
   try {
     process.env.OPENAI_BASE_URL = `${server.url.origin}/v1`;
-    const schema = { name: "learned_skills", schema: { type: "object" } };
-    const complete = createModelCompleter({
+    const resolveApiKey = async () => "synthetic";
+    const text = createModelCompleter({
       model: packageModel,
-      resolveApiKey: async () => "synthetic",
-      jsonSchema: schema,
+      resolveApiKey,
+      json: false,
     });
-    expect(await complete("Propose skills.")).toBe('{"skills":[]}');
-    refuse = true;
-    expect(await complete("Propose skills.")).toBe('{"skills":[]}');
-    expect(formats).toEqual([
-      { type: "json_schema", json_schema: { ...schema, strict: true } },
-      { type: "json_schema", json_schema: { ...schema, strict: true } },
-      { type: "json_object" },
-    ]);
+    const json = createModelCompleter({ model: packageModel, resolveApiKey });
+    expect(await text("Propose skills.")).toBe("<none/>");
+    await json("Route this.");
+    expect(formats).toEqual(["none", { type: "json_object" }]);
   } finally {
     await server.stop(true);
   }

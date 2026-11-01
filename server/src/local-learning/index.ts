@@ -31,6 +31,7 @@ import type { LearningThreadRecord } from "../local-threads/runner";
 import {
   analysisPrompt,
   parseProposals,
+  personLanguage,
   transcriptOf,
   worthReading,
 } from "./analyze";
@@ -156,6 +157,7 @@ export function createLocalLearning(options: {
               transcript: transcriptOf(messages),
               known: store.knownFor(thread.agentId),
               declined: store.rejectedNamesFor(thread.agentId),
+              language: personLanguage(messages),
             }),
             signal,
           );

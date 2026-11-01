@@ -5,6 +5,7 @@ import {
   analysisPrompt,
   normalizeSkillName,
   parseProposals,
+  personLanguage,
   transcriptOf,
   worthReading,
 } from "../src/local-learning/analyze";
@@ -87,39 +88,53 @@ describe("reading a conversation", () => {
   });
 });
 
+const block = (name: string, instructions: string, rationale = "Asked.") =>
+  `<skill>\n<name>${name}</name>\n<description>When summarizing.</description>\n<instructions>\n${instructions}\n</instructions>\n<rationale>${rationale}</rationale>\n</skill>`;
+
 describe("reading the model's answer", () => {
-  test("skips reasoning and keeps valid Skills", () => {
-    const answer = `<think>{"skills":"not this"}</think>
-      {"skills":[
-        {"name":"Weekly Report Summary","description":"When summarizing.","instructions":"1. Risks first.","rationale":"Asked."},
-        {"name":"broken","description":"","instructions":"x"},
-        {"name":"third","description":"d","instructions":"i"}
-      ]}`;
-    const skills = parseProposals(answer);
-    expect(skills.map((skill) => skill.name)).toEqual([
+  test("skips reasoning and keeps complete Skills", () => {
+    const answer = `<think><skill><name>not-this</name></skill></think>
+${block("Weekly Report Summary", "1. Risks first.")}
+<skill><name>broken</name><description>d</description></skill>
+${block("third", "i")}`;
+    expect(parseProposals(answer).map((skill) => skill.name)).toEqual([
       "weekly-report-summary",
       "third",
     ]);
   });
 
-  test("a Skill whose JSON came apart is dropped, not stored cut short", () => {
-    const answer =
-      '{"skills":[{"name":"email","description":"d","instructions":"1. Subject, e.g.","请假一天":"rest","rationale":""}]}';
-    expect(parseProposals(answer)).toEqual([]);
+  test("quotation marks inside the instructions survive", () => {
+    const [skill] = parseProposals(
+      block(
+        "email",
+        '1. Subject, e.g. "请假一天".\n2. Do NOT add "此致敬礼".\n3. Sign "谢谢，小周".',
+      ),
+    );
+    expect(skill?.instructions).toBe(
+      '1. Subject, e.g. "请假一天".\n2. Do NOT add "此致敬礼".\n3. Sign "谢谢，小周".',
+    );
+    expect(skill?.rationale).toBe("Asked.");
   });
 
-  test("an empty or unreadable answer proposes nothing", () => {
-    expect(parseProposals('{"skills":[]}')).toEqual([]);
-    expect(parseProposals("no json here")).toEqual([]);
-    expect(parseProposals("{not json}")).toEqual([]);
+  test("nothing worth keeping proposes nothing", () => {
+    expect(parseProposals("<none/>")).toEqual([]);
+    expect(parseProposals("no tags here")).toEqual([]);
+    expect(parseProposals("<skill><name>x</name>")).toEqual([]);
   });
 
   test("a name in another script still gets a usable name", () => {
     expect(normalizeSkillName("周报 总结")).toBe("");
-    const [skill] = parseProposals(
-      '{"skills":[{"name":"周报总结","description":"d","instructions":"i"}]}',
-    );
+    const [skill] = parseProposals(block("周报总结", "i"));
     expect(skill?.name).toMatch(/^learned-skill-[a-z0-9]+-0$/);
+  });
+
+  test("the person's language is named when they write Chinese", () => {
+    expect(personLanguage(conversation)).toBeUndefined();
+    expect(
+      personLanguage([
+        { id: "1", role: "user", content: "帮我写一封请假邮件，明天看牙医。" },
+      ]),
+    ).toBe("Chinese (简体中文)");
   });
 });
 
@@ -220,7 +235,7 @@ describe("local Automatic Learning", () => {
       ]),
       complete: async (prompt) => {
         prompts.push(prompt);
-        return '{"skills":[{"name":"risks-first","description":"When summarizing a report.","instructions":"Put risks first.","rationale":"Asked."}]}';
+        return "<skill><name>risks-first</name><description>When summarizing a report.</description><instructions>Put risks first.</instructions><rationale>Asked.</rationale></skill>";
       },
     });
 
@@ -279,7 +294,7 @@ describe("local Automatic Learning", () => {
       threads: threads([settled("t1")]),
       complete: async () => {
         calls++;
-        return '{"skills":[]}';
+        return "<none/>";
       },
     });
     learning.runNow();

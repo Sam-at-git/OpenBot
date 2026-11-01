@@ -205,7 +205,6 @@ import {
   createOpenSkillIndex,
 } from "./learning/sharing";
 import { createLocalLearning } from "./local-learning";
-import { PROPOSALS_JSON_SCHEMA } from "./local-learning/analyze";
 import { LocalLearningStore } from "./local-learning/store";
 import { localThreads } from "./local-threads/client";
 import { createMemoryDefaults } from "./memory/defaults";
@@ -1382,7 +1381,8 @@ const localLearning =
           resolveApiKey: resolveRuntimeModelApiKey,
           timeoutMs: 10 * 60_000,
           maxTokens: 8192,
-          jsonSchema: PROPOSALS_JSON_SCHEMA,
+          // The answer is tagged text, not JSON (local-learning/analyze.ts).
+          json: false,
         }),
         botName: async (agentId) =>
           (
