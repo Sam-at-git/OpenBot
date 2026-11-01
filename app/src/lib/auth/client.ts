@@ -84,3 +84,56 @@ export async function signInWithEmailDomain(
     );
   }
 }
+
+/**
+ * Sign in with an email and a password, when OpenBot has password sign-in turned on.
+ *
+ * Better Auth sets the session cookie on success; the caller refetches the current user. Injectable for the same
+ * reason as `signInWith`.
+ */
+export async function signInWithPassword(
+  email: string,
+  password: string,
+  start: (input: {
+    email: string;
+    password: string;
+  }) => Promise<SocialResult> = (input) =>
+    authClient.signIn.email(input) as Promise<SocialResult>,
+) {
+  const result = await start({ email, password });
+
+  if (result.error) {
+    throw new Error(
+      result.error.message ||
+        "Couldn't sign you in. Check your email and password.",
+    );
+  }
+}
+
+/**
+ * Change the signed-in person's password and sign out every other device.
+ *
+ * Injectable for the same reason as `signInWith`.
+ */
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+  start: (input: {
+    currentPassword: string;
+    newPassword: string;
+    revokeOtherSessions: boolean;
+  }) => Promise<SocialResult> = (input) =>
+    authClient.changePassword(input) as Promise<SocialResult>,
+) {
+  const result = await start({
+    currentPassword,
+    newPassword,
+    revokeOtherSessions: true,
+  });
+
+  if (result.error) {
+    throw new Error(
+      result.error.message || "Couldn't change your password. Try again.",
+    );
+  }
+}

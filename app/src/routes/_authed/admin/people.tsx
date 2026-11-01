@@ -8,6 +8,7 @@ import {
 import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { InvitesSection } from "@/components/admin/invites";
 import {
   PageEmpty,
   PageRows,
@@ -230,6 +231,7 @@ function PeoplePage() {
           </Button>
         ) : null}
       </PageSection>
+      <InvitesSection />
     </PageShell>
   );
 }

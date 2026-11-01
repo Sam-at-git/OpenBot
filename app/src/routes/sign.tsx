@@ -1,24 +1,32 @@
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  redirect,
+  useNavigate,
+} from "@tanstack/react-router";
 import { motion, useReducedMotion } from "motion/react";
 import { useState } from "react";
 import AgentOrb from "@/components/agents/orb/agent-orb";
 import { ProviderLogo } from "@/components/auth/provider-logo";
 import { Button } from "@/components/ui/button";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import {
   providerName,
   signInWith,
   signInWithEmailDomain,
+  signInWithPassword,
 } from "@/lib/auth/client";
 import { resumeUrlFor, verifierPathFor } from "@/lib/auth/resume";
 import { appConfig } from "@/lib/generated/application-config";
 import { searchTextEntry } from "@/lib/search-text";
+import { queryClient } from "@/query-client";
 import {
   type AuthProviderId,
   authProvidersQueryOptions,
   currentUserQueryOptions,
+  refreshCurrentUser,
 } from "../lib/auth/queries";
 
 const EASE_OUT = [0.23, 1, 0.32, 1] as const;
@@ -77,11 +85,47 @@ function SignScreen() {
   const { flow_id: flowId } = Route.useSearch();
   // Which provider is being opened, rather than whether one is: with three buttons, a single
   // boolean would put "Opening…" on all of them.
-  const [opening, setOpening] = useState<AuthProviderId | "sso" | null>(null);
+  const [opening, setOpening] = useState<
+    AuthProviderId | "sso" | "password" | null
+  >(null);
   const [error, setError] = useState<string | null>(null);
   const { data: options } = useQuery(authProvidersQueryOptions());
   const providers = options?.providers ?? [];
   const [email, setEmail] = useState("");
+  const [passwordEmail, setPasswordEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const navigate = useNavigate();
+  const passwordSignIn =
+    options?.passwordSignIn === true && !options.ssoRequired;
+
+  /**
+   * Sign in with an email and a password. Better Auth sets the session cookie, so the current user is fetched again
+   * and the app opens where a provider sign-in would have returned to.
+   */
+  async function handlePasswordSignIn(submission: React.FormEvent) {
+    submission.preventDefault();
+    setError(null);
+    setOpening("password");
+
+    try {
+      await signInWithPassword(passwordEmail.trim(), password);
+      await refreshCurrentUser(queryClient);
+      const verifier = verifierPathFor(flowId);
+      if (verifier) {
+        // The verifier is served by the server, not this app, so only a document navigation reaches it.
+        window.location.assign(verifier);
+        return;
+      }
+      await navigate({ to: "/" });
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Couldn't sign you in. Check your email and password.",
+      );
+      setOpening(null);
+    }
+  }
 
   /**
    * Sign in through whichever identity provider covers this address.
@@ -209,9 +253,59 @@ function SignScreen() {
               account.
             </p>
           ) : null}
+          {passwordSignIn ? (
+            <form
+              className="flex flex-col gap-3"
+              onSubmit={handlePasswordSignIn}
+            >
+              <Field>
+                <FieldLabel htmlFor="sign-in-email">Email</FieldLabel>
+                <Input
+                  autoComplete="email"
+                  id="sign-in-email"
+                  onChange={(event) => setPasswordEmail(event.target.value)}
+                  required
+                  type="email"
+                  value={passwordEmail}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="sign-in-password">Password</FieldLabel>
+                <Input
+                  autoComplete="current-password"
+                  id="sign-in-password"
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                  type="password"
+                  value={password}
+                />
+              </Field>
+              <Button
+                className="h-10 w-full tracking-tight"
+                disabled={
+                  opening !== null ||
+                  passwordEmail.trim().length === 0 ||
+                  password.length === 0
+                }
+                size="lg"
+                type="submit"
+              >
+                {opening === "password" ? "Signing in…" : "Sign in"}
+              </Button>
+              {providers.length > 0 || options?.sso ? (
+                <div className="flex items-center gap-3">
+                  <Separator className="flex-1" />
+                  <span className="text-muted-foreground text-xs">or</span>
+                  <Separator className="flex-1" />
+                </div>
+              ) : null}
+            </form>
+          ) : null}
           {providers.length > 0 && !options?.ssoRequired ? (
-            providerButtons
-          ) : options?.sso || options?.ssoRequired ? null : (
+            <div className={passwordSignIn ? "mt-3" : undefined}>
+              {providerButtons}
+            </div>
+          ) : options?.sso || options?.ssoRequired || passwordSignIn ? null : (
             <p className="text-center text-sm text-muted-foreground">
               Sign-in isn't set up yet. An admin has to set it up first.
             </p>

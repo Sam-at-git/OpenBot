@@ -5,6 +5,7 @@ import {
   PageSection,
   PageShell,
 } from "@/components/layout/page-shell";
+import { AccountSettings } from "@/components/settings/account-password";
 import { MessageListPreference } from "@/components/settings/message-list-preference";
 import { ProfileSettings } from "@/components/settings/profile";
 import { StandingInstructions } from "@/components/settings/standing-instructions";
@@ -42,6 +43,7 @@ function RouteComponent() {
       title="Preferences"
     >
       <ProfileSettings />
+      <AccountSettings />
       <PageSection title="General">
         <PageRows>
           <Item size="sm">

@@ -45,6 +45,8 @@ mock.module("@/lib/auth/client", () => ({
   signInWith: (...args: Parameters<SignInSpy>) => signInSpy(...args),
   signInWithEmailDomain: (...args: Parameters<DomainSignInSpy>) =>
     domainSignInSpy(...args),
+  signInWithPassword: async () => {},
+  changePassword: async () => {},
 }));
 const { Route } = await import("@/routes/sign");
 

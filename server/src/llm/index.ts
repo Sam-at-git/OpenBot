@@ -74,7 +74,9 @@ export function createLlmService(options: {
         store.providerSecrets(),
       ]).then(([settings, providers]) => ({
         settings,
-        providers: new Map(providers.map((provider) => [provider.id, provider])),
+        providers: new Map(
+          providers.map((provider) => [provider.id, provider]),
+        ),
       }));
       // A failed read is not kept: the next call asks again.
       value.catch(() => {
@@ -260,7 +262,10 @@ export function createLlmService(options: {
         latencyMs: now() - started,
         reply:
           typeof reply === "string"
-            ? reply.replace(/<think>[\s\S]*?<\/think>/g, "").trim().slice(0, 200)
+            ? reply
+                .replace(/<think>[\s\S]*?<\/think>/g, "")
+                .trim()
+                .slice(0, 200)
             : "",
       };
     },

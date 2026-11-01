@@ -161,7 +161,10 @@ export function createLlmStore(database: Database, encryptionKey: string) {
     },
 
     /** False when there is no such provider. */
-    async updateProvider(id: string, input: LlmProviderInput): Promise<boolean> {
+    async updateProvider(
+      id: string,
+      input: LlmProviderInput,
+    ): Promise<boolean> {
       const key =
         input.apiKey === undefined
           ? {}

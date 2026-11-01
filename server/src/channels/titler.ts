@@ -32,7 +32,10 @@ export type TitlerOptions = {
         baseUrl: string;
         apiKey: string | null;
         model: string;
-        onUsage?: (usage: { inputTokens: number; outputTokens: number }) => void;
+        onUsage?: (usage: {
+          inputTokens: number;
+          outputTokens: number;
+        }) => void;
       }
     | undefined
   >;

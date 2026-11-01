@@ -78,6 +78,7 @@ import { createRoleRepository } from "./auth/guards";
 import { createIdentityProviderStore } from "./auth/identity-provider-store";
 import { createOrganizationAuth } from "./auth/organization";
 import { organizationUserStore } from "./auth/organization-store";
+import { ensureBootstrapInvite } from "./auth/password";
 import { openbotAddress } from "./browser/address";
 import { botBrowserNetwork } from "./browser/bot-browser";
 import { personBrowserEgressPolicy } from "./browser/egress";
@@ -204,7 +205,6 @@ import {
   createLearningSharingStore,
   createOpenSkillIndex,
 } from "./learning/sharing";
-import { ensureBootstrapInvite } from "./auth/password";
 import { createLlmService } from "./llm";
 import { createLlmStore } from "./llm/store";
 import { createLocalLearning } from "./local-learning";
@@ -575,13 +575,17 @@ if (betterAuth && config.auth?.password)
     .then((code) => {
       if (!code) return;
       const origin =
-        config.appUrl ?? config.auth?.trustedOrigins[0] ?? "http://localhost:3010";
+        config.appUrl ??
+        config.auth?.trustedOrigins[0] ??
+        "http://localhost:3010";
       console.info(
         `No password account exists yet. Open this invite to create the first one, which becomes the admin and keeps everything already in OpenBot: ${origin.replace(/\/+$/, "")}/sign-up?invite=${code}`,
       );
     })
     .catch(() => {
-      console.error(JSON.stringify({ type: "password-bootstrap-invite-failed" }));
+      console.error(
+        JSON.stringify({ type: "password-bootstrap-invite-failed" }),
+      );
     });
 const { resolveRequestActor, identifyUser, identifyActor } = createRequestActor(
   {

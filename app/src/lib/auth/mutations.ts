@@ -1,6 +1,7 @@
 import { mutationOptions, type QueryClient } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 import { clearSkin } from "@/skins/store";
+import { changePassword } from "./client";
 import { authKeys } from "./queries";
 
 async function signOut() {
@@ -25,5 +26,16 @@ export function signOutMutationOptions(queryClient: QueryClient) {
       clearSkin();
       queryClient.removeQueries({ queryKey: authKeys.all });
     },
+  });
+}
+
+/** Change your own password. Every other device this account is signed in on is signed out. */
+export function changePasswordMutationOptions() {
+  return mutationOptions({
+    mutationFn: (input: {
+      currentPassword: string;
+      newPassword: string;
+    }): Promise<void> =>
+      changePassword(input.currentPassword, input.newPassword),
   });
 }

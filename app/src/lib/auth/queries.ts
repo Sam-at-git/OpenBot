@@ -1,4 +1,4 @@
-import { queryOptions } from "@tanstack/react-query";
+import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { client, tryClient } from "@/lib/client";
 
 /**
@@ -49,6 +49,8 @@ export type SignInOptions = {
   sso: boolean;
   /** An administrator requires SSO; social sign-in stays only as the administrators' break-glass. */
   ssoRequired: boolean;
+  /** Whether people sign in with an email and a password (and join with an invite). */
+  passwordSignIn: boolean;
 };
 
 async function signInOptions(): Promise<SignInOptions> {
@@ -61,12 +63,14 @@ async function signInOptions(): Promise<SignInOptions> {
     authProviders?: AuthProviderId[];
     ssoConfigured?: boolean;
     ssoRequired?: boolean;
+    passwordSignIn?: boolean;
   };
 
   return {
     providers: body.authProviders ?? [],
     sso: body.ssoConfigured === true,
     ssoRequired: body.ssoRequired === true,
+    passwordSignIn: body.passwordSignIn === true,
   };
 }
 
@@ -108,4 +112,16 @@ export function currentUserQueryOptions() {
     queryFn: currentUser,
     staleTime: 60_000,
   });
+}
+
+/**
+ * Fetch who is signed in again, after something set or changed the session cookie in place (a password sign-in, an
+ * invite sign-up).
+ *
+ * `refetchQueries` and not `invalidateQueries`: the guards read the user with `ensureQueryData`, which returns a
+ * cached answer even when it is stale, so a cached "not signed in" would send a person who just signed in straight
+ * back to /sign.
+ */
+export async function refreshCurrentUser(queryClient: QueryClient) {
+  await queryClient.refetchQueries({ queryKey: authKeys.currentUser() });
 }

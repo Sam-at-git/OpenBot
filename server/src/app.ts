@@ -97,11 +97,11 @@ import {
   createLearningRoutes,
   type LearningAdminDependencies,
 } from "./learning/routes";
-import { createLlmRoutes } from "./llm/routes";
 import {
   createPersonalLearningRoutes,
   type PersonalLearningRouteDeps,
 } from "./learning/sharing-routes";
+import { createLlmRoutes } from "./llm/routes";
 import { localThreads } from "./local-threads/client";
 import type { MemoryIngestion } from "./memory/ingestion";
 import { createMemoryRoutes } from "./memory/routes";

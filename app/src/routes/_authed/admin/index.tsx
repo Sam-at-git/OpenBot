@@ -1,5 +1,7 @@
 import {
+  IconBrain,
   IconBuildingBank,
+  IconChartBar,
   IconChecks,
   IconChevronRight,
   IconCode,
@@ -61,6 +63,13 @@ const SECTIONS: {
         description: "Manage this deployment’s keys and tokens.",
         icon: IconKey,
         linkOptions: { to: "/admin/credentials" },
+      },
+      {
+        title: "Models",
+        description:
+          "Choose which model each Bot uses and where its conversations go.",
+        icon: IconBrain,
+        linkOptions: { to: "/admin/models" },
       },
       {
         title: "Boundaries",
@@ -156,6 +165,12 @@ const SECTIONS: {
         description: "Review actions taken in OpenBot and who took them.",
         icon: IconListDetails,
         linkOptions: { to: "/admin/audit" },
+      },
+      {
+        title: "Usage",
+        description: "See how many tokens each model, Bot and person used.",
+        icon: IconChartBar,
+        linkOptions: { to: "/admin/usage" },
       },
     ],
   },

@@ -151,7 +151,10 @@ export function mountPasswordRoutes(
     if (!invite)
       return context.json({ error: "Open your invite link again." }, 400);
     if (!name || name.length > 80)
-      return context.json({ error: "Add your name, up to 80 characters." }, 400);
+      return context.json(
+        { error: "Add your name, up to 80 characters." },
+        400,
+      );
     if (!EMAIL.test(email) || email.length > 254)
       return context.json({ error: "Enter a valid email address." }, 400);
     if (password.length < MIN_PASSWORD_LENGTH || password.length > 128)

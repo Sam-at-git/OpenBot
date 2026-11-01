@@ -79,7 +79,8 @@ export function parseProviderInput(value: unknown): Parsed<LlmProviderInput> {
   if (!baseUrl)
     return {
       ok: false,
-      error: "The base URL is an http or https address, such as https://api.deepseek.com/v1.",
+      error:
+        "The base URL is an http or https address, such as https://api.deepseek.com/v1.",
     };
   if (
     value.apiKey !== undefined &&
@@ -317,34 +318,38 @@ export function createLlmRoutes(input: {
     }
   });
 
-  routes.put("/settings", bodyLimit({ maxSize: 64 * 1024 }), async (context) => {
-    const refused = refuseCrossSite(context);
-    if (refused) return refused;
-    const parsed = parseSettings((await body(context))?.settings);
-    if (!parsed.ok) return context.json({ error: parsed.error }, 400);
-    const providers = new Set(
-      (await llm.store.listProviders()).map((provider) => provider.id),
-    );
-    const choices = [
-      parsed.value.default,
-      parsed.value.auxiliary,
-      ...Object.values(parsed.value.bots),
-    ].filter((choice): choice is LlmChoice => choice !== null);
-    if (choices.some((choice) => !providers.has(choice.providerId)))
-      return context.json(
-        { error: "A model setting names a provider that doesn't exist." },
-        400,
+  routes.put(
+    "/settings",
+    bodyLimit({ maxSize: 64 * 1024 }),
+    async (context) => {
+      const refused = refuseCrossSite(context);
+      if (refused) return refused;
+      const parsed = parseSettings((await body(context))?.settings);
+      if (!parsed.ok) return context.json({ error: parsed.error }, 400);
+      const providers = new Set(
+        (await llm.store.listProviders()).map((provider) => provider.id),
       );
-    await llm.store.writeSettings(parsed.value);
-    llm.invalidate();
-    await record(context, {
-      change: "models_chosen",
-      default: parsed.value.default,
-      auxiliary: parsed.value.auxiliary,
-      botCount: Object.keys(parsed.value.bots).length,
-    });
-    return overview(context);
-  });
+      const choices = [
+        parsed.value.default,
+        parsed.value.auxiliary,
+        ...Object.values(parsed.value.bots),
+      ].filter((choice): choice is LlmChoice => choice !== null);
+      if (choices.some((choice) => !providers.has(choice.providerId)))
+        return context.json(
+          { error: "A model setting names a provider that doesn't exist." },
+          400,
+        );
+      await llm.store.writeSettings(parsed.value);
+      llm.invalidate();
+      await record(context, {
+        change: "models_chosen",
+        default: parsed.value.default,
+        auxiliary: parsed.value.auxiliary,
+        botCount: Object.keys(parsed.value.bots).length,
+      });
+      return overview(context);
+    },
+  );
 
   routes.get("/usage", async (context) => {
     const requested = Number(context.req.query("days") ?? "30");

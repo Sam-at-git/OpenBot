@@ -22,7 +22,11 @@ describe("what an admin sends", () => {
       apiKey: " sk-test ",
       enabled: true,
       models: [
-        { id: "deepseek-chat", inputPricePerMillion: 2, outputPricePerMillion: 8 },
+        {
+          id: "deepseek-chat",
+          inputPricePerMillion: 2,
+          outputPricePerMillion: 8,
+        },
         { id: "deepseek-chat" },
         { id: "deepseek-reasoner", label: "R1" },
       ],
@@ -55,8 +59,12 @@ describe("what an admin sends", () => {
     });
     expect(kept.ok && "apiKey" in kept.value).toBe(false);
     expect(
-      parseProviderInput({ name: "x", baseUrl: "ftp://x", enabled: true, models: [] })
-        .ok,
+      parseProviderInput({
+        name: "x",
+        baseUrl: "ftp://x",
+        enabled: true,
+        models: [],
+      }).ok,
     ).toBe(false);
     expect(parseModels([{ id: "m", inputPricePerMillion: -1 }]).ok).toBe(false);
     expect(parseModels([{ label: "no id" }]).ok).toBe(false);

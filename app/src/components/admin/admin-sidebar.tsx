@@ -1,6 +1,8 @@
 import {
   IconArrowLeft,
+  IconBrain,
   IconBuildingBank,
+  IconChartBar,
   IconChecks,
   IconCode,
   IconDeviceDesktop,
@@ -51,6 +53,11 @@ const GROUPS: {
         title: "Credentials",
         icon: IconKey,
         linkOptions: { to: "/admin/credentials" },
+      },
+      {
+        title: "Models",
+        icon: IconBrain,
+        linkOptions: { to: "/admin/models" },
       },
       {
         title: "Boundaries",
@@ -121,6 +128,11 @@ const GROUPS: {
         title: "Audit",
         icon: IconListDetails,
         linkOptions: { to: "/admin/audit" },
+      },
+      {
+        title: "Usage",
+        icon: IconChartBar,
+        linkOptions: { to: "/admin/usage" },
       },
     ],
   },
