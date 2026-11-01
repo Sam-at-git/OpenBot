@@ -143,7 +143,10 @@ export function computerUploadPath(name: string): string {
   const flat = [...name.normalize("NFC")]
     .map((character) => {
       const code = character.charCodeAt(0);
-      return character === "/" || character === "\\" || code < 32 || code === 127
+      return character === "/" ||
+        character === "\\" ||
+        code < 32 ||
+        code === 127
         ? "_"
         : character;
     })

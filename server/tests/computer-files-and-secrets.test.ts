@@ -28,7 +28,9 @@ describe("a PDF attachment", () => {
 
   test("gets a safe path in the Bot's home folder", () => {
     expect(computerUploadPath("合同 2026.pdf")).toBe("uploads/合同 2026.pdf");
-    expect(computerUploadPath("../../etc/passwd")).toBe("uploads/_.._etc_passwd");
+    expect(computerUploadPath("../../etc/passwd")).toBe(
+      "uploads/_.._etc_passwd",
+    );
     expect(computerUploadPath("a/b\\c.pdf")).toBe("uploads/a_b_c.pdf");
     expect(computerUploadPath("")).toBe("uploads/file");
   });

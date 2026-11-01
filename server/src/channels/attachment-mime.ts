@@ -155,7 +155,8 @@ export function sniffMimeType(bytes: Uint8Array, claimed: string): string {
   )
     return "application/pdf";
   // Claimed as a PDF without the signature: not a PDF, and not accepted under any other name either.
-  if (mediaTypeOf(claimed) === "application/pdf") return "application/octet-stream";
+  if (mediaTypeOf(claimed) === "application/pdf")
+    return "application/octet-stream";
 
   /*
    * `mediaTypeOf`, NOT A LOCAL COPY OF WHAT IT DOES.
