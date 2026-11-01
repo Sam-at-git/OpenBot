@@ -77,7 +77,7 @@ ENV PATH="/opt/python/bin:${PATH}"
 # downloaded at run time; the computer's egress policy would block that anyway.
 RUN /opt/python/bin/pip install --no-cache-dir \
       rapidocr-onnxruntime==1.4.4 pymupdf==2.0 \
-  && /opt/python/bin/python -c "from rapidocr_onnxruntime import RapidOCR; RapidOCR(); import fitz" \
+  && /opt/python/bin/python -c "from rapidocr_onnxruntime import RapidOCR; RapidOCR(); import pymupdf" \
   && rm -rf /root/.cache
 COPY --chmod=755 agent-computer/bin/pdf-ocr /usr/local/bin/pdf-ocr
 

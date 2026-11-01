@@ -46,10 +46,10 @@ def main() -> int:
     parser.add_argument("--force-ocr", action="store_true", help="OCR every page, even with a text layer")
     args = parser.parse_args()
 
-    import fitz  # pymupdf
+    import pymupdf
 
     try:
-        document = fitz.open(args.pdf)
+        document = pymupdf.open(args.pdf)
     except Exception as exc:  # noqa: BLE001
         print(f"pdf-ocr: can't open {args.pdf}: {exc}", file=sys.stderr)
         return 2
