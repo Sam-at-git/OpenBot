@@ -83,12 +83,16 @@ function runSummary(state: LocalLearningState): string {
     state.waitingConversations === 1
       ? "1 conversation is waiting."
       : `${state.waitingConversations} conversations are waiting.`;
-  if (!run) return `No analysis has run yet. ${waiting}`;
+  const quiet =
+    state.waitingConversations > 0
+      ? " OpenBot reads a conversation once it has been quiet for 15 minutes."
+      : "";
+  if (!run) return `No analysis has run yet. ${waiting}${quiet}`;
   if (run.status === "running")
     return `Analyzing now. ${run.conversationsRead} read so far, ${run.proposed} skills proposed.`;
   if (run.status === "failed")
     return run.error ?? "The last analysis didn't finish. Try again.";
-  return `Last analysis ${when(run.finishedAt ?? run.startedAt)}: read ${run.conversationsRead}, proposed ${run.proposed}. ${waiting}`;
+  return `Last analysis ${when(run.finishedAt ?? run.startedAt)}: read ${run.conversationsRead}, proposed ${run.proposed}. ${waiting}${quiet}`;
 }
 
 /**

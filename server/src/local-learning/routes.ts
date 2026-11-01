@@ -49,9 +49,7 @@ function parseSettings(
   };
 }
 
-function parseSkillEdit(
-  value: unknown,
-):
+function parseSkillEdit(value: unknown):
   | {
       ok: true;
       edit: { name: string; description: string; instructions: string };
