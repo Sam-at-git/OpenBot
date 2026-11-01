@@ -81,6 +81,21 @@ RUN /opt/python/bin/pip install --no-cache-dir \
   && rm -rf /root/.cache
 COPY --chmod=755 agent-computer/bin/pdf-ocr /usr/local/bin/pdf-ocr
 
+# PaddleOCR (PP-OCRv5) and PP-StructureV3 (layout, tables, formulas, seals into Markdown), CPU only.
+# Their models are fetched here, at build time, into /opt/paddlex: a Bot's HOME is its own folder,
+# so the default ~/.paddlex would be empty for every Bot, and the computer can't download them at run
+# time. PADDLE_MODEL_SOURCE picks where the build fetches from (bos, huggingface, modelscope).
+ARG PADDLE_MODEL_SOURCE=bos
+ENV PADDLE_PDX_CACHE_HOME=/opt/paddlex \
+    PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True
+RUN /opt/python/bin/pip install --no-cache-dir \
+      paddlepaddle==3.2.2 "paddleocr[doc-parser]==3.7.0" \
+  && PADDLE_PDX_MODEL_SOURCE="$PADDLE_MODEL_SOURCE" /opt/python/bin/python -c "\
+from paddleocr import PaddleOCR, PPStructureV3; \
+PaddleOCR(lang='ch'); \
+PPStructureV3()" \
+  && rm -rf /root/.cache
+
 WORKDIR /app
 # The lockfile as well as the manifest: `--frozen-lockfile` with no lockfile present resolves afresh
 # and exits 0, so the file has to be here for the flag to mean anything.
