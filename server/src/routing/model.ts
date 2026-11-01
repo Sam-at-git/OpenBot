@@ -35,13 +35,10 @@ export function createModelCompleter(deps: {
           json_schema: { ...deps.jsonSchema, strict: true },
         }
       : undefined;
-    let response = await request(schemaFormat);
-    if (!anthropic && schemaFormat && response.status === 400)
-      response = await request(undefined);
-    async function request(
+    const request = (
       format: Record<string, unknown> | undefined,
-    ): Promise<Response> {
-      return fetch(
+    ): Promise<Response> =>
+      fetch(
       anthropic
         ? anthropicMessagesUrl(process.env)
         : chatCompletionsUrl(process.env),
@@ -79,7 +76,9 @@ export function createModelCompleter(deps: {
           : AbortSignal.timeout(timeoutMs),
       },
     );
-    }
+    let response = await request(schemaFormat);
+    if (!anthropic && schemaFormat && response.status === 400)
+      response = await request(undefined);
     if (!response.ok)
       throw new Error(`router model answered ${response.status}`);
     const body = (await response.json()) as {
