@@ -39,43 +39,43 @@ export function createModelCompleter(deps: {
       format: Record<string, unknown> | undefined,
     ): Promise<Response> =>
       fetch(
-      anthropic
-        ? anthropicMessagesUrl(process.env)
-        : chatCompletionsUrl(process.env),
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          ...(anthropic
-            ? { "x-api-key": key, "anthropic-version": "2023-06-01" }
-            : { authorization: `Bearer ${key}` }),
+        anthropic
+          ? anthropicMessagesUrl(process.env)
+          : chatCompletionsUrl(process.env),
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            ...(anthropic
+              ? { "x-api-key": key, "anthropic-version": "2023-06-01" }
+              : { authorization: `Bearer ${key}` }),
+          },
+          body: JSON.stringify({
+            model: deps.model.defaultModel,
+            /*
+             * No temperature.
+             *
+             * It was zero, for a router that answers the same way twice. Reasoning models refuse the
+             * setting outright — "Unsupported value: 'temperature' does not support 0 with this model.
+             * Only the default (1) value is supported" — and this call treats a throw as "not sure", so
+             * every routing decision quietly became the default coworker and the roster was never
+             * consulted. A question naming Google Drive went to a Bot holding no Drive tools, which is
+             * the exact failure the roster exists to prevent, and nothing said so.
+             *
+             * Omitted rather than set per model, because a list of which models accept it is a list that
+             * goes stale. `response_format` and a prompt that asks for one object keep the answer tight,
+             * and the confidence floor still sends an unsure match to the default.
+             */
+            ...(anthropic
+              ? { max_tokens: deps.maxTokens ?? 1024 }
+              : { response_format: format ?? { type: "json_object" } }),
+            messages: [{ role: "user", content: prompt }],
+          }),
+          signal: signal
+            ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)])
+            : AbortSignal.timeout(timeoutMs),
         },
-        body: JSON.stringify({
-          model: deps.model.defaultModel,
-          /*
-           * No temperature.
-           *
-           * It was zero, for a router that answers the same way twice. Reasoning models refuse the
-           * setting outright — "Unsupported value: 'temperature' does not support 0 with this model.
-           * Only the default (1) value is supported" — and this call treats a throw as "not sure", so
-           * every routing decision quietly became the default coworker and the roster was never
-           * consulted. A question naming Google Drive went to a Bot holding no Drive tools, which is
-           * the exact failure the roster exists to prevent, and nothing said so.
-           *
-           * Omitted rather than set per model, because a list of which models accept it is a list that
-           * goes stale. `response_format` and a prompt that asks for one object keep the answer tight,
-           * and the confidence floor still sends an unsure match to the default.
-           */
-          ...(anthropic
-            ? { max_tokens: deps.maxTokens ?? 1024 }
-            : { response_format: format ?? { type: "json_object" } }),
-          messages: [{ role: "user", content: prompt }],
-        }),
-        signal: signal
-          ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)])
-          : AbortSignal.timeout(timeoutMs),
-      },
-    );
+      );
     let response = await request(schemaFormat);
     if (!anthropic && schemaFormat && response.status === 400)
       response = await request(undefined);
