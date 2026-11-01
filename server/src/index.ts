@@ -117,6 +117,7 @@ import { createSandboxedStore } from "./components/sandboxed";
 import { createComponentStore } from "./components/store";
 import {
   botOwnership,
+  computerKeyText,
   createComputerSeatResolver,
 } from "./computer/computer-key";
 import { createComputerGateway } from "./computer/gateway";
@@ -1718,6 +1719,23 @@ const loadAttachmentForActor =
  * open a PDF the model cannot read. Only for a Bot this person may use a computer with; the write is governed and
  * audited as a file write. The computer is only located once there is something to save.
  */
+const STAGED_ATTACHMENT_TTL_MS = 30 * 60 * 1000;
+const STAGED_ATTACHMENT_LIMIT = 1000;
+/** Files already saved to a computer, by `<computer>/<bot>|<thread>|<attachment>`. */
+const stagedAttachments = new Map<string, { path: string; at: number }>();
+function rememberStagedAttachment(key: string, path: string, at: number) {
+  stagedAttachments.delete(key);
+  stagedAttachments.set(key, { path, at });
+  for (const [old, entry] of stagedAttachments) {
+    if (
+      stagedAttachments.size <= STAGED_ATTACHMENT_LIMIT &&
+      at - entry.at < STAGED_ATTACHMENT_TTL_MS
+    )
+      break;
+    stagedAttachments.delete(old);
+  }
+}
+
 const stageAttachmentsForActor =
   (actorId: string): StageAttachmentsForBot =>
   async (botId) => {
@@ -1728,7 +1746,16 @@ const stageAttachmentsForActor =
     return async (threadId, ids) => {
       const saved = new Map<string, string>();
       const seat = await computerGateway.seatFor(botId, actor.id);
+      const now = Date.now();
       for (const id of ids) {
+        // Every tool step of one turn is a new run over the same asked message, so its files are
+        // saved once, not once per step.
+        const key = `${computerKeyText(seat.key)}/${botId}|${threadId}|${id}`;
+        const done = stagedAttachments.get(key);
+        if (done && now - done.at < STAGED_ATTACHMENT_TTL_MS) {
+          saved.set(id, done.path);
+          continue;
+        }
         const file = await loadAttachmentForTurn(
           database,
           { actorId, threadId },
@@ -1743,6 +1770,7 @@ const stageAttachmentsForActor =
             { path, bytes: file.bytes },
           );
           saved.set(id, path);
+          rememberStagedAttachment(key, path, now);
         } catch (error) {
           console.error(
             JSON.stringify({
