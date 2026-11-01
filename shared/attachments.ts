@@ -139,13 +139,16 @@ export const MAX_COMPUTER_FILE_BYTES = 25 * 1024 * 1024;
 
 /** Where an attached file is saved in a Bot's computer, relative to its home folder. */
 export function computerUploadPath(name: string): string {
-  const safe =
-    name
-      .normalize("NFC")
-      .replace(/[\\/\u0000-\u001f\u007f]+/g, "_")
-      .replace(/^\.+/, "")
-      .trim()
-      .slice(0, 180) || "file";
+  // Separators and control characters become `_`, so the name stays one file inside `uploads/`.
+  const flat = [...name.normalize("NFC")]
+    .map((character) => {
+      const code = character.charCodeAt(0);
+      return character === "/" || character === "\\" || code < 32 || code === 127
+        ? "_"
+        : character;
+    })
+    .join("");
+  const safe = flat.replace(/^\.+/, "").trim().slice(0, 180) || "file";
   return `uploads/${safe}`;
 }
 

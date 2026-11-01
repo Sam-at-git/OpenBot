@@ -55,8 +55,8 @@ import {
   type ComputerFileNote,
   newInlineBudget,
   resolveAttachmentParts,
-  savedOnComputerNote,
   type StoredAttachment,
+  savedOnComputerNote,
 } from "./channels/attachment-parts";
 import type { AgentFetch, StallGuard } from "./channels/stall-guard";
 import type { DeploymentConfig } from "./config";

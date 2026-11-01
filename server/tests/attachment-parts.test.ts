@@ -476,19 +476,19 @@ describe("what a stored attachment becomes is decided by its bytes, not by the p
     // reachable the day a type leaves the accepted lists with rows of it still in the table, and
     // the answer must not be mojibake — the model has to be told it cannot see the file.
     const result = (await resolveAttachmentParts(
-      partOf("document", "pdf1", "invoice.pdf"),
+      partOf("document", "zip1", "archive.zip"),
       loadFrom({
-        pdf1: {
-          mimeType: "application/pdf",
-          name: "invoice.pdf",
-          bytes: Buffer.from("%PDF-1.7", "utf8"),
+        zip1: {
+          mimeType: "application/zip",
+          name: "archive.zip",
+          bytes: Buffer.from("PK\u0003\u0004", "utf8"),
         },
       }),
     )) as Array<Record<string, unknown>>;
 
     expect(result[0]).toEqual({
       type: "text",
-      text: '[attachment "invoice.pdf" is a application/pdf file, which cannot be put in front of the model]',
+      text: '[attachment "archive.zip" is a application/zip file, which cannot be put in front of the model]',
     });
   });
 

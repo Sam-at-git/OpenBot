@@ -28,7 +28,7 @@ describe("a PDF attachment", () => {
 
   test("gets a safe path in the Bot's home folder", () => {
     expect(computerUploadPath("合同 2026.pdf")).toBe("uploads/合同 2026.pdf");
-    expect(computerUploadPath("../../etc/passwd")).toBe("uploads/_etc_passwd");
+    expect(computerUploadPath("../../etc/passwd")).toBe("uploads/_.._etc_passwd");
     expect(computerUploadPath("a/b\\c.pdf")).toBe("uploads/a_b_c.pdf");
     expect(computerUploadPath("")).toBe("uploads/file");
   });
@@ -39,7 +39,11 @@ describe("a PDF attachment", () => {
       source: { type: "url", value: "/api/attachments/a1" },
       metadata: { attachmentId: "a1", filename: "contract.pdf" },
     };
-    const file = { mimeType: "application/pdf", name: "contract.pdf", bytes: pdf };
+    const file = {
+      mimeType: "application/pdf",
+      name: "contract.pdf",
+      bytes: pdf,
+    };
     const budget = { remaining: 1, limit: 1 };
     const saved = (await resolveAttachmentParts(
       [part],
@@ -51,7 +55,10 @@ describe("a PDF attachment", () => {
     expect(saved[0]?.type).toBe("text");
     expect(saved[0]?.text).toContain("~/uploads/contract.pdf");
     expect(budget.remaining).toBe(1);
-    const without = (await resolveAttachmentParts([part], async () => file)) as {
+    const without = (await resolveAttachmentParts(
+      [part],
+      async () => file,
+    )) as {
       text: string;
     }[];
     expect(without[0]?.text).toBe(noComputerNote("a1", file));

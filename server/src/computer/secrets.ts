@@ -160,7 +160,10 @@ export function createComputerSecretRoutes(input: {
         )
       : context.req.header("sec-fetch-site") !== "cross-site";
   };
-  const record = async (actorUserId: string, payload: Record<string, unknown>) => {
+  const record = async (
+    actorUserId: string,
+    payload: Record<string, unknown>,
+  ) => {
     if (!input.audit) return;
     // Names and scopes only: a value is never written to the trail.
     await recordAuditEvent(input.audit, {
@@ -219,7 +222,10 @@ export function createComputerSecretRoutes(input: {
     const id = context.req.param("id");
     if (!(await input.store.remove(id)))
       return context.json({ error: "No such secret." }, 404);
-    await record(context.var.actor.id, { change: "computer_secret_removed", id });
+    await record(context.var.actor.id, {
+      change: "computer_secret_removed",
+      id,
+    });
     return context.json({ secrets: await input.store.list() });
   });
 

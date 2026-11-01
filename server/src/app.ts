@@ -50,10 +50,6 @@ import type { IdentityProviderStore } from "./auth/identity-provider-store";
 import { desktopAuthPage } from "./auth/native-browser";
 import { mountPasswordRoutes, type PasswordRouteDeps } from "./auth/password";
 import {
-  type ComputerSecretStore,
-  createComputerSecretRoutes,
-} from "./computer/secrets";
-import {
   type BotBrowserRouteDeps,
   createBotBrowser,
 } from "./browser/bot-browser";
@@ -80,6 +76,10 @@ import type { ComputerGateway } from "./computer/gateway";
 import type { PageFrameStore } from "./computer/page-frames";
 import type { PolicyStore } from "./computer/policy-store";
 import { createComputerRoutes } from "./computer/routes";
+import {
+  type ComputerSecretStore,
+  createComputerSecretRoutes,
+} from "./computer/secrets";
 import { configuredAuthProviders, type DeploymentConfig } from "./config";
 import {
   type CredentialAdminService,

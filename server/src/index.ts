@@ -80,7 +80,6 @@ import { createIdentityProviderStore } from "./auth/identity-provider-store";
 import { createOrganizationAuth } from "./auth/organization";
 import { organizationUserStore } from "./auth/organization-store";
 import { ensureBootstrapInvite } from "./auth/password";
-import { createComputerSecretStore } from "./computer/secrets";
 import { openbotAddress } from "./browser/address";
 import { botBrowserNetwork } from "./browser/bot-browser";
 import { personBrowserEgressPolicy } from "./browser/egress";
@@ -136,6 +135,7 @@ import {
   createComputerProvider,
   describeComputerIsolation,
 } from "./computer/provider";
+import { createComputerSecretStore } from "./computer/secrets";
 import { createSnapshotStore } from "./computer/snapshot-store";
 import { type IntelligenceSettings, loadConfig } from "./config";
 import {

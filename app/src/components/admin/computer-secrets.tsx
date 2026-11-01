@@ -16,11 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Field,
-  FieldDescription,
-  FieldLabel,
-} from "@/components/ui/field";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
   Item,
@@ -234,9 +230,7 @@ function SecretDialog({
           {secret && (
             <Button
               disabled={busy}
-              onClick={() =>
-                remove.mutate(secret.id, { onSuccess: onClose })
-              }
+              onClick={() => remove.mutate(secret.id, { onSuccess: onClose })}
               size="sm"
               type="button"
               variant="outline"

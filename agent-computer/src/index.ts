@@ -1577,7 +1577,10 @@ serve<StreamData>({
           base64?: unknown;
         } | null;
         if (typeof body?.path !== "string" || typeof body.base64 !== "string") {
-          return json({ error: "A path and the file's contents are required." }, 400);
+          return json(
+            { error: "A path and the file's contents are required." },
+            400,
+          );
         }
         try {
           const { files } = await workspaces.for(botId);
