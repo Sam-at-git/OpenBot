@@ -146,8 +146,9 @@ export function createLocalLearning(options: {
           if (!names.has(thread.agentId))
             names.set(
               thread.agentId,
-              (await options.botName?.(thread.agentId).catch(() => undefined)) ??
-                thread.agentId,
+              (await options
+                .botName?.(thread.agentId)
+                .catch(() => undefined)) ?? thread.agentId,
             );
           const answer = await complete(
             analysisPrompt({

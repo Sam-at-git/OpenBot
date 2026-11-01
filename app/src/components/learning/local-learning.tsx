@@ -28,11 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Field,
-  FieldDescription,
-  FieldLabel,
-} from "@/components/ui/field";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
   Item,
@@ -235,7 +231,9 @@ function LocalLearningSections({
                 value={String(settings.intervalHours)}
               >
                 <SelectTrigger aria-label="How often" size="sm">
-                  <SelectValue>{intervalLabel(settings.intervalHours)}</SelectValue>
+                  <SelectValue>
+                    {intervalLabel(settings.intervalHours)}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
@@ -309,7 +307,8 @@ function LocalLearningSections({
         description="Read each one before you approve it. A skill learned from one person's conversation reaches everyone who uses that Bot."
         empty={{
           title: "No skills to review",
-          description: "OpenBot proposes skills after it reads new conversations.",
+          description:
+            "OpenBot proposes skills after it reads new conversations.",
         }}
         nameFor={nameFor}
         onOpen={onOpen}
@@ -357,8 +356,7 @@ function LocalLearningSections({
 }
 
 function skillStatusLabel(skill: LocalLearnedSkill): string {
-  if (skill.status === "pending")
-    return skill.revisionOf ? "Update" : "New";
+  if (skill.status === "pending") return skill.revisionOf ? "Update" : "New";
   if (skill.status === "approved") return "In use";
   if (skill.status === "retired") return "Turned off";
   return "Declined";
@@ -391,7 +389,9 @@ function SkillSection({
             <div key={skill.id}>
               {index > 0 && <Separator />}
               <Item
-                render={<button onClick={() => onOpen(skill.id)} type="button" />}
+                render={
+                  <button onClick={() => onOpen(skill.id)} type="button" />
+                }
                 size="sm"
               >
                 <ItemMedia variant="icon">
@@ -535,9 +535,7 @@ function SkillDialog({
         </DialogHeader>
         <DialogBody className="mt-4 grid gap-4 overflow-y-auto">
           {skill.rationale && (
-            <p className="text-muted-foreground text-sm">
-              {skill.rationale}
-            </p>
+            <p className="text-muted-foreground text-sm">{skill.rationale}</p>
           )}
           <p className="text-muted-foreground text-sm">
             {skill.sourceCount === 1

@@ -83,7 +83,10 @@ export type ProposedSkill = {
 export class LocalLearningStore {
   private readonly db: Database;
 
-  constructor(dbPath: string, private readonly now: () => number = Date.now) {
+  constructor(
+    dbPath: string,
+    private readonly now: () => number = Date.now,
+  ) {
     if (dbPath !== ":memory:") mkdirSync(dirname(dbPath), { recursive: true });
     this.db = new Database(dbPath, { create: true });
     this.db.run("PRAGMA journal_mode = WAL");
@@ -288,7 +291,9 @@ export class LocalLearningStore {
     const current = this.skill(id);
     if (!current) return undefined;
     if (current.status !== "pending" && current.status !== "approved")
-      throw new LocalSkillConflictError("Only a Skill waiting for review or in use can be edited.");
+      throw new LocalSkillConflictError(
+        "Only a Skill waiting for review or in use can be edited.",
+      );
     try {
       this.db.run(
         "UPDATE skills SET name = ?, description = ?, instructions = ?, updated_at = ? WHERE id = ?",

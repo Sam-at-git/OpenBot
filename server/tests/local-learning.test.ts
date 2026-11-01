@@ -15,7 +15,11 @@ import {
 import type { LearningThreadRecord } from "../src/local-threads/runner";
 
 const conversation: Message[] = [
-  { id: "1", role: "user", content: "Summarize the weekly report as 3 bullets." },
+  {
+    id: "1",
+    role: "user",
+    content: "Summarize the weekly report as 3 bullets.",
+  },
   {
     id: "2",
     role: "assistant",
@@ -277,7 +281,11 @@ describe("local Automatic Learning", () => {
     expect(calls).toBe(0);
     expect(await learning.acquire("general-assistant")).toBeUndefined();
 
-    store.writeSettings({ enabled: false, intervalHours: 24, excludedAgents: [] });
+    store.writeSettings({
+      enabled: false,
+      intervalHours: 24,
+      excludedAgents: [],
+    });
     expect(await learning.acquire("general-assistant")).toBeUndefined();
   });
 

@@ -7,9 +7,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useId, useState } from "react";
 import { PageSection, PageShell } from "@/components/layout/page-shell";
+import { LocalLearningPage } from "@/components/learning/local-learning";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { LocalLearningPage } from "@/components/learning/local-learning";
 import { agentListQueryOptions } from "@/lib/agents/queries";
 import { deploymentCapabilitiesQueryOptions } from "@/lib/deployment/queries";
 import {

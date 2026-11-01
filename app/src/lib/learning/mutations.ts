@@ -42,7 +42,8 @@ export function setLearnedSkillOpenMutationOptions(queryClient: QueryClient) {
   });
 }
 
-const LOCAL_FALLBACK = "Couldn't save the change to Automatic learning. Try again.";
+const LOCAL_FALLBACK =
+  "Couldn't save the change to Automatic learning. Try again.";
 const invalidateLocal = (queryClient: QueryClient) =>
   queryClient.invalidateQueries({ queryKey: learningKeys.local });
 

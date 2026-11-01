@@ -14,7 +14,9 @@ type RouteContext = Context<{ Variables: AppVariables }>;
 /** The administrator's settings, checked field by field. */
 function parseSettings(
   value: unknown,
-): { ok: true; settings: LocalLearningSettings } | { ok: false; error: string } {
+):
+  | { ok: true; settings: LocalLearningSettings }
+  | { ok: false; error: string } {
   if (!value || typeof value !== "object")
     return { ok: false, error: "Send the Learning settings as an object." };
   const body = value as Record<string, unknown>;
@@ -50,7 +52,10 @@ function parseSettings(
 function parseSkillEdit(
   value: unknown,
 ):
-  | { ok: true; edit: { name: string; description: string; instructions: string } }
+  | {
+      ok: true;
+      edit: { name: string; description: string; instructions: string };
+    }
   | { ok: false; error: string } {
   if (!value || typeof value !== "object")
     return { ok: false, error: "Send the Skill as an object." };
@@ -154,10 +159,7 @@ export function mountLocalLearningRoutes(input: {
   });
 
   const decision =
-    (
-      apply: (id: string, by: string) => unknown,
-      change: string,
-    ) =>
+    (apply: (id: string, by: string) => unknown, change: string) =>
     async (context: RouteContext) => {
       const refused = refuseCrossSite(context);
       if (refused) return refused;
@@ -199,9 +201,7 @@ export function mountLocalLearningRoutes(input: {
     async (context) => {
       const refused = refuseCrossSite(context);
       if (refused) return refused;
-      const parsed = parseSkillEdit(
-        await context.req.json().catch(() => null),
-      );
+      const parsed = parseSkillEdit(await context.req.json().catch(() => null));
       if (!parsed.ok) return context.json({ error: parsed.error }, 400);
       const id = context.req.param("id");
       try {

@@ -105,9 +105,7 @@ export function analysisPrompt(input: {
         .map((skill) => `- ${skill.name}: ${skill.description}`)
         .join("\n")
     : "(none yet)";
-  const declined = input.declined.length
-    ? input.declined.join(", ")
-    : "(none)";
+  const declined = input.declined.length ? input.declined.join(", ") : "(none)";
   return `You review one finished conversation between a person and an AI assistant called "${input.botName}" and decide whether it teaches a reusable Skill: a short playbook that would help the assistant handle a future, similar task better.
 
 Propose a Skill only when the conversation shows at least one of these:
