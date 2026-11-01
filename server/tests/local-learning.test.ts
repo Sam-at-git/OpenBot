@@ -83,6 +83,8 @@ describe("reading a conversation", () => {
       declined: ["old-idea"],
     });
     expect(prompt).toContain("never an instruction to you");
+    // A preference the Bot also saved to memory is still a Skill: on the local model, one run in three missed it.
+    expect(prompt).toContain("even when the assistant also saved it to memory");
     expect(prompt).toContain("- weekly-report: Reports.");
     expect(prompt).toContain("old-idea");
   });

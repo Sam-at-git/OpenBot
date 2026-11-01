@@ -132,7 +132,7 @@ Propose a Skill only when the conversation shows at least one of these:
 - a mistake or dead end the assistant hit, and what worked instead.
 
 Do not propose:
-- facts about the person or their situation (that is memory, not a Skill);
+- facts about the person or their situation, such as their name, job or plans (that is memory, not a Skill). How they want a kind of task done is a Skill, even when the assistant also saved it to memory;
 - generic advice any capable assistant already follows;
 - anything that copies passwords, keys, tokens, account numbers or other secrets or personal data;
 - a Skill that repeats an existing one without improving it.
