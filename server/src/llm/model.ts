@@ -7,6 +7,7 @@
  */
 import { createOpenAI } from "@ai-sdk/openai";
 import type { PlanLanguageModel } from "../agents/plan-model";
+import { modelFetch } from "@openbot/shared/model-fetch";
 
 type StreamResult = Awaited<ReturnType<PlanLanguageModel["doStream"]>>;
 type Part = StreamResult["stream"] extends ReadableStream<infer T> ? T : never;
@@ -93,6 +94,8 @@ export function chatModelFor(target: LlmTarget): PlanLanguageModel {
     baseURL: target.baseUrl,
     apiKey: target.apiKey || "not-needed",
     name: `openbot-${target.providerId}`,
+    // A local model can be silent for minutes before its first token; see `shared/model-fetch.ts`.
+    fetch: modelFetch,
   });
   return provider.chat(target.model) as unknown as PlanLanguageModel;
 }

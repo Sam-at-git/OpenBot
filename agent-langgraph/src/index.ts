@@ -24,6 +24,7 @@ import {
   trimHistory,
 } from "../../shared/history-budget";
 import { listenPort } from "../../shared/listen-port";
+import { modelFetch } from "../../shared/model-fetch";
 import {
   type ManagedModel,
   readManagedModel,
@@ -220,7 +221,7 @@ function buildModel(chosen?: ManagedModel) {
       model: chosen.model,
       apiKey: apiKeyOrPlaceholder(chosen.apiKey ?? undefined),
       streaming: true,
-      configuration: { baseURL: chosen.baseUrl },
+      configuration: { baseURL: chosen.baseUrl, fetch: modelFetch },
       ...(requiresResponsesApi(chosen.model) ? { useResponsesApi: true } : {}),
     });
   }
@@ -244,7 +245,8 @@ function buildModel(chosen?: ManagedModel) {
     model: MODEL,
     apiKey: apiKeyOrPlaceholder(API_KEY),
     streaming: true,
-    ...(BASE_URL ? { configuration: { baseURL: BASE_URL } } : {}),
+    // A local model can be silent for minutes before its first token; see `shared/model-fetch.ts`.
+    configuration: { ...(BASE_URL ? { baseURL: BASE_URL } : {}), fetch: modelFetch },
     ...(USE_RESPONSES_API ? { useResponsesApi: true } : {}),
     /*
      * `reasoning.effort`, not the `reasoningEffort` convenience field: the integration deprecated
