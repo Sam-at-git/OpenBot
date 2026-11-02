@@ -34,7 +34,7 @@ export type HistoryBudget = {
 };
 
 export const DEFAULT_HISTORY_BUDGET: HistoryBudget = {
-  maxTokens: 60_000,
+  maxTokens: 80_000,
   keepRecent: 3,
   minTokens: 300,
   keepRecentShort: 20,

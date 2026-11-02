@@ -14,7 +14,7 @@ export type LlmModelEntry = {
   outputPricePerMillion?: number;
   /**
    * How much conversation this model is sent, in estimated tokens. Past it, the oldest tool results go as a short
-   * note (`shared/history-budget.ts`). Absent uses the deployment's default (`HISTORY_TOKEN_BUDGET`, 60k).
+   * note (`shared/history-budget.ts`). Absent uses the deployment's default (`HISTORY_TOKEN_BUDGET`, 80k).
    */
   historyTokens?: number;
 };

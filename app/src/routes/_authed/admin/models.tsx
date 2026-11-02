@@ -795,7 +795,7 @@ function ProviderDialog({
               conversation budget. Only the ID is required. Prices are per
               million tokens and feed the cost estimate on Usage. The budget is
               how much of a conversation the model reads, such as 64k. Past it,
-              the oldest tool results are shortened. Leave it empty for 60k.
+              the oldest tool results are shortened. Leave it empty for 80k.
             </FieldDescription>
             <div className="flex items-center gap-3">
               <Button

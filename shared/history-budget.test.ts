@@ -118,13 +118,13 @@ describe("keeping a long conversation within its budget", () => {
     expect(trimAgUiHistory(messages, { ...budget, maxTokens: 0 })).toEqual(
       messages,
     );
-    expect(historyBudgetFrom({}).maxTokens).toBe(60_000);
+    expect(historyBudgetFrom({}).maxTokens).toBe(80_000);
     expect(historyBudgetFrom({ HISTORY_TOKEN_BUDGET: "40000" }).maxTokens).toBe(
       40_000,
     );
     expect(historyBudgetFrom({ HISTORY_TOKEN_BUDGET: "0" }).maxTokens).toBe(0);
     expect(historyBudgetFrom({ HISTORY_TOKEN_BUDGET: "lots" }).maxTokens).toBe(
-      60_000,
+      80_000,
     );
   });
 
