@@ -175,10 +175,7 @@ export function sniffMimeType(bytes: Uint8Array, claimed: string): string {
   // Excel and Word the same way: named by their contents, and refused when only the claim says so.
   const office = sniffOfficeType(bytes);
   if (office) return office;
-  if (
-    mediaTypeOf(claimed) === XLSX_MIME ||
-    mediaTypeOf(claimed) === DOCX_MIME
-  )
+  if (mediaTypeOf(claimed) === XLSX_MIME || mediaTypeOf(claimed) === DOCX_MIME)
     return "application/octet-stream";
 
   /*

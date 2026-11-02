@@ -36,10 +36,14 @@ describe("an Excel or Word attachment", () => {
 
   test("is refused when only the claim says so", () => {
     expect(
-      classifyAttachment(sniffMimeType(zipWith("ppt/presentation.xml"), XLSX_MIME)),
+      classifyAttachment(
+        sniffMimeType(zipWith("ppt/presentation.xml"), XLSX_MIME),
+      ),
     ).not.toBe("file");
     expect(
-      classifyAttachment(sniffMimeType(new Uint8Array([1, 2, 3, 0xff]), DOCX_MIME)),
+      classifyAttachment(
+        sniffMimeType(new Uint8Array([1, 2, 3, 0xff]), DOCX_MIME),
+      ),
     ).not.toBe("file");
   });
 
