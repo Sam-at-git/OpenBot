@@ -127,14 +127,23 @@ export const ACCEPTED_TEXT_MIME = [
   "application/json",
 ] as const;
 
-/**
- * Files a model cannot read directly but a Bot's computer can: they are saved into the Bot's computer
- * (`uploads/` in its home folder) for a skill's script to open, and the model is told where. Only a
- * Bot with a computer can use one.
- */
-export const ACCEPTED_COMPUTER_FILE_MIME = ["application/pdf"] as const;
+export const XLSX_MIME =
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+export const DOCX_MIME =
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
-/** Largest computer file (a PDF) one attachment may be. The computer itself takes up to 32 MiB. */
+/**
+ * Files a model cannot read directly but a Bot's computer can: PDF, Excel (.xlsx) and Word (.docx).
+ * They are saved into the Bot's computer (`uploads/` in its home folder) for a skill's script to
+ * open, and the model is told where. Only a Bot with a computer can use one.
+ */
+export const ACCEPTED_COMPUTER_FILE_MIME = [
+  "application/pdf",
+  XLSX_MIME,
+  DOCX_MIME,
+] as const;
+
+/** Largest computer file (a PDF, Excel or Word file) one attachment may be. The computer itself takes up to 32 MiB. */
 export const MAX_COMPUTER_FILE_BYTES = 25 * 1024 * 1024;
 
 /** Where an attached file is saved in a Bot's computer, relative to its home folder. */

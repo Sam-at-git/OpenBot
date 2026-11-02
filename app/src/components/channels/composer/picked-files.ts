@@ -96,7 +96,7 @@ export function screenPickedFiles(
       rejected.push(
         reject(
           file,
-          `'${file.name}' is too large for a PDF. The limit is ${formatBytes(MAX_COMPUTER_FILE_BYTES)}.`,
+          `'${file.name}' is too large. The limit for PDF, Excel and Word files is ${formatBytes(MAX_COMPUTER_FILE_BYTES)}.`,
         ),
       );
       continue;

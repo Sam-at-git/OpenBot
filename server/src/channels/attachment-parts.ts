@@ -1,7 +1,9 @@
 import {
   attachmentUrl,
   classifyAttachment,
+  DOCX_MIME,
   MAX_EXTRACTED_CHARACTERS,
+  XLSX_MIME,
 } from "@openbot/shared/attachments";
 
 /**
@@ -579,7 +581,7 @@ async function resolvePart(
  * exists to bound. Trading a rare second read for unbounded buffer retention is
  * the wrong way round.
  */
-/** What the model is told about a file for the Bot's computer (a PDF): where it is, or why it isn't there. */
+/** What the model is told about a file for the Bot's computer (PDF, Excel, Word): where it is, or why it isn't there. */
 export type ComputerFileNote = (id: string, file: StoredAttachment) => string;
 
 const sizeOf = (bytes: number) =>
@@ -596,7 +598,13 @@ export function savedOnComputerNote(
   file: StoredAttachment,
   path: string,
 ): string {
-  return `The person attached "${file.name}" (${file.mimeType}, ${sizeOf(file.bytes.length)}). It is not shown to you as text. It is saved on your computer at ~/${path} (the path ${path} relative to your home folder, where your commands start); open it there with your computer's tools.`;
+  const how =
+    file.mimeType === XLSX_MIME
+      ? " (in Python, with openpyxl or pandas)"
+      : file.mimeType === DOCX_MIME
+        ? " (in Python, with python-docx)"
+        : "";
+  return `The person attached "${file.name}" (${file.mimeType}, ${sizeOf(file.bytes.length)}). It is not shown to you as text. It is saved on your computer at ~/${path} (the path ${path} relative to your home folder, where your commands start); open it there with your computer's tools${how}.`;
 }
 
 export async function resolveAttachmentParts(

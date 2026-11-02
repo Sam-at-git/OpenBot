@@ -174,6 +174,8 @@ export const FILE_PICKER_ACCEPT = [
   ".csv",
   ".json",
   ".pdf",
+  ".xlsx",
+  ".docx",
 ].join(",");
 
 /**

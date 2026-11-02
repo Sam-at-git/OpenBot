@@ -1,8 +1,10 @@
 import {
   ACCEPTED_IMAGE_MIME,
   ACCEPTED_TEXT_MIME,
+  DOCX_MIME,
   mediaTypeOf,
   namesNoFormat,
+  XLSX_MIME,
 } from "@openbot/shared/attachments";
 
 /**
@@ -47,6 +49,18 @@ function hasSignature(
 ): boolean {
   if (bytes.length < offset + signature.length) return false;
   return signature.every((byte, i) => bytes[offset + i] === byte);
+}
+
+/**
+ * Excel (.xlsx) and Word (.docx) files are zip archives. Each is told by the part only it has: `xl/workbook.xml` or
+ * `word/document.xml`, whose names are stored as plain bytes in the archive.
+ */
+function sniffOfficeType(bytes: Uint8Array): string | null {
+  if (!hasSignature(bytes, [0x50, 0x4b, 0x03, 0x04])) return null;
+  const archive = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (archive.includes("xl/workbook.xml")) return XLSX_MIME;
+  if (archive.includes("word/document.xml")) return DOCX_MIME;
+  return null;
 }
 
 function sniffImageType(bytes: Uint8Array): string | null {
@@ -156,6 +170,15 @@ export function sniffMimeType(bytes: Uint8Array, claimed: string): string {
     return "application/pdf";
   // Claimed as a PDF without the signature: not a PDF, and not accepted under any other name either.
   if (mediaTypeOf(claimed) === "application/pdf")
+    return "application/octet-stream";
+
+  // Excel and Word the same way: named by their contents, and refused when only the claim says so.
+  const office = sniffOfficeType(bytes);
+  if (office) return office;
+  if (
+    mediaTypeOf(claimed) === XLSX_MIME ||
+    mediaTypeOf(claimed) === DOCX_MIME
+  )
     return "application/octet-stream";
 
   /*

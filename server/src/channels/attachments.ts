@@ -839,14 +839,14 @@ export function createChannelAttachmentRoutes(
       );
     }
 
-    // A file for the Bot's computer (a PDF). With this kind a staged row can reach 25 MiB, so the
+    // A file for the Bot's computer (PDF, Excel or Word). With this kind a staged row can reach 25 MiB, so the
     // 32-row backstop above bounds staged blobs at 800 MiB per person rather than 256 MiB.
     if (kind === "file" && bytes.byteLength > MAX_COMPUTER_FILE_BYTES) {
       return context.json(
         {
           error: `'${name}' is larger than the ${megabytes(
             MAX_COMPUTER_FILE_BYTES,
-          )} limit for PDFs.`,
+          )} limit for PDF, Excel and Word files.`,
         },
         413,
       );

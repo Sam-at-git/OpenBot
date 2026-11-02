@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   classifyAttachment,
   computerUploadPath,
+  DOCX_MIME,
+  XLSX_MIME,
 } from "@openbot/shared/attachments";
 import { sniffMimeType } from "../src/channels/attachment-mime";
 import {
@@ -12,6 +14,44 @@ import {
 import { secretNameProblem } from "../src/computer/secrets";
 
 const pdf = Buffer.from("%PDF-1.7\n%âãÏÓ\n1 0 obj\n<<>>\nendobj\n", "latin1");
+
+/** The start of a zip archive holding one named part: all the server looks at. */
+const zipWith = (part: string) =>
+  new Uint8Array(
+    Buffer.concat([
+      Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x14, 0, 0, 0]),
+      Buffer.from(`${"\0".repeat(22)}${part}<?xml version="1.0"?>`, "latin1"),
+    ]),
+  );
+
+describe("an Excel or Word attachment", () => {
+  test("is recognised by the part only it has, whatever the browser claimed", () => {
+    expect(sniffMimeType(zipWith("xl/workbook.xml"), "")).toBe(XLSX_MIME);
+    expect(
+      sniffMimeType(zipWith("word/document.xml"), "application/octet-stream"),
+    ).toBe(DOCX_MIME);
+    expect(classifyAttachment(XLSX_MIME)).toBe("file");
+    expect(classifyAttachment(DOCX_MIME)).toBe("file");
+  });
+
+  test("is refused when only the claim says so", () => {
+    expect(
+      classifyAttachment(sniffMimeType(zipWith("ppt/presentation.xml"), XLSX_MIME)),
+    ).not.toBe("file");
+    expect(
+      classifyAttachment(sniffMimeType(new Uint8Array([1, 2, 3, 0xff]), DOCX_MIME)),
+    ).not.toBe("file");
+  });
+
+  test("tells the Bot which Python library opens it", () => {
+    const note = savedOnComputerNote(
+      { mimeType: XLSX_MIME, name: "报价.xlsx", bytes: Buffer.from("x") },
+      computerUploadPath("报价.xlsx"),
+    );
+    expect(note).toContain("~/uploads/报价.xlsx");
+    expect(note).toContain("openpyxl");
+  });
+});
 
 describe("a PDF attachment", () => {
   test("is recognised by its bytes, not its claim", () => {
