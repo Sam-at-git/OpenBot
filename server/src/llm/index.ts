@@ -9,8 +9,10 @@
  * WHAT IS COUNTED (Admin, Usage). Every built-in Bot call and every background call records its token counts, never
  * its content. The started-with model is counted too when it is an OpenAI-compatible chat endpoint, by running it
  * through the same model object; an Anthropic or Responses-API start keeps the runtime's own path and is not counted.
- * Remote Bots (agent-bot, LangGraph) call their models from their own containers and are not counted here.
+ * Bots OpenBot runs in its own containers (agent-bot, LangGraph) are handed the chosen model with each run (see
+ * `shared/managed-model.ts`) and call it from there, so they are not counted here.
  */
+import type { ManagedModel } from "@openbot/shared/managed-model";
 import type {
   LlmChoice,
   LlmOverview,
@@ -165,10 +167,33 @@ export function createLlmService(options: {
     );
   }
 
+  /**
+   * What a Bot that runs in its own container (agent-bot, agent-langgraph) is told to use: its own choice, then the
+   * default. Never the started-with model: with nothing chosen, the container keeps the model it was started with.
+   */
+  async function managedTarget(
+    agentId: string,
+  ): Promise<LlmTarget | undefined> {
+    const { settings, providers } = await snapshot();
+    return (
+      targetFor(settings.bots[agentId], providers) ??
+      targetFor(settings.default, providers)
+    );
+  }
+
   return {
     invalidate,
     botTarget,
     auxiliaryTarget,
+    managedTarget,
+
+    /** For the agent resolver: the model to hand a Bot OpenBot runs in its own container, if an admin chose one. */
+    async managedModelFor(agentId: string): Promise<ManagedModel | undefined> {
+      const target = await managedTarget(agentId).catch(() => undefined);
+      return target
+        ? { baseUrl: target.baseUrl, apiKey: target.apiKey, model: target.model }
+        : undefined;
+    },
 
     /** For the agent resolver: each built-in Bot's model for this person, counting its usage. */
     languageModelForActor(actorId: string): LanguageModelForBot {

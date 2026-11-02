@@ -5,6 +5,7 @@ import type { AgentFetch, StallGuard } from "../channels/stall-guard";
 import {
   type HandoffForRun,
   type LanguageModelForBot,
+  type ManagedModelForBot,
   type LoadAgentsForActor,
   type LoadAttachment,
   type LoadInstructions,
@@ -78,6 +79,8 @@ export type ActorAgentResolverDependencies = {
   languageModelForActor?: (actorId: string) => LanguageModelForBot;
   /** Where this person's attached files go in each built-in Bot's computer (index.ts). */
   stageAttachmentsForActor?: (actorId: string) => StageAttachmentsForBot;
+  /** The model each Bot on OpenBot's own endpoint answers with, when an admin chose one (llm/). */
+  managedModelFor?: ManagedModelForBot;
 };
 
 /**
@@ -132,6 +135,7 @@ export function createActorAgentResolver(
       deps.loadPersonalMemoryForActor?.(actor.id),
       deps.languageModelForActor?.(actor.id),
       deps.stageAttachmentsForActor?.(actor.id),
+      deps.managedModelFor,
     ).then((agents) => {
       const loadName = deps.loadNameForActor;
       if (loadName) {

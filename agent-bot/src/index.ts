@@ -5,6 +5,10 @@ import OpenAI from "openai";
 import { hasManagedAgentToken } from "../../shared/agent-authorisation";
 import { listenPort } from "../../shared/listen-port";
 import {
+  type ManagedModel,
+  readManagedModel,
+} from "../../shared/managed-model";
+import {
   apiKeyOrPlaceholder,
   botSettings,
   keyIsRequired,
@@ -127,7 +131,31 @@ function toProviderTools(input: RunAgentInput) {
   }));
 }
 
-async function runAgent(input: RunAgentInput): Promise<Response> {
+/**
+ * The client and model for one run: the model an admin chose under Admin, Models when OpenBot sent one, otherwise
+ * the one this container was started with. A chosen model that needs the Responses API can't be used here, and is
+ * refused in the run rather than sent and failed on its first tool call.
+ */
+function modelFor(chosen?: ManagedModel): { client: OpenAI; model: string } {
+  if (!chosen) return { client: openai, model: MODEL };
+  if (requiresResponsesApi(chosen.model)) {
+    throw new Error(
+      `${chosen.model} can't be used by this Bot: it speaks /v1/chat/completions, and that endpoint refuses function tools for this model. Choose another model for it under Admin, Models.`,
+    );
+  }
+  return {
+    client: new OpenAI({
+      apiKey: apiKeyOrPlaceholder(chosen.apiKey ?? undefined),
+      baseURL: chosen.baseUrl,
+    }),
+    model: chosen.model,
+  };
+}
+
+async function runAgent(
+  input: RunAgentInput,
+  chosen?: ManagedModel,
+): Promise<Response> {
   const encoder = new EventEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -142,8 +170,9 @@ async function runAgent(input: RunAgentInput): Promise<Response> {
       } as BaseEvent);
 
       try {
-        const completion = await openai.chat.completions.create({
-          model: MODEL,
+        const { client, model } = modelFor(chosen);
+        const completion = await client.chat.completions.create({
+          model,
           messages: toProviderMessages(input),
           tools: toProviderTools(input),
           stream: true,
@@ -256,7 +285,7 @@ serve({
         return Response.json({ error: "Unauthorized." }, { status: 401 });
       }
       const input = (await request.json()) as RunAgentInput;
-      return runAgent(input);
+      return runAgent(input, readManagedModel(request.headers));
     }
 
     return Response.json({ error: "Not found." }, { status: 404 });

@@ -253,6 +253,26 @@ describe("which model a call uses", () => {
     });
   });
 
+  test("a Bot in its own container gets its own choice, then the default, and never the started-with model", async () => {
+    const { llm } = service({
+      default: { providerId: "deepseek", model: "deepseek-chat" },
+      auxiliary: null,
+      bots: { "risk-analyst": { providerId: "ollama", model: "qwen" } },
+    });
+    expect(await llm.managedModelFor("risk-analyst")).toEqual({
+      baseUrl: "http://host.docker.internal:11434/v1",
+      apiKey: null,
+      model: "qwen",
+    });
+    expect(await llm.managedModelFor("contracts")).toEqual({
+      baseUrl: "https://api.deepseek.com/v1",
+      apiKey: "sk",
+      model: "deepseek-chat",
+    });
+    const { llm: none } = service({ default: null, auxiliary: null, bots: {} });
+    expect(await none.managedModelFor("contracts")).toBeUndefined();
+  });
+
   test("a provider that is off is skipped, and a started-with model that is not chat-compatible is left alone", async () => {
     const { llm } = service(
       {

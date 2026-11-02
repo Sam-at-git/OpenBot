@@ -14,6 +14,10 @@ import { serve } from "bun";
 import { hasManagedAgentToken } from "../../shared/agent-authorisation";
 import { listenPort } from "../../shared/listen-port";
 import {
+  type ManagedModel,
+  readManagedModel,
+} from "../../shared/managed-model";
+import {
   apiKeyOrPlaceholder,
   baseUrlVariableFor,
   botSettings,
@@ -195,7 +199,20 @@ function toBoundTools(input: RunAgentInput) {
  * Every one of these binds tools the same way and streams the same way, which is exactly why the
  * rest of this file does not know which one it got.
  */
-function buildModel() {
+function buildModel(chosen?: ManagedModel) {
+  /*
+   * The model an admin chose under Admin, Models, sent by OpenBot with this run. Every provider there speaks the
+   * OpenAI-compatible chat API, so it is always this integration, whatever this container was started with.
+   */
+  if (chosen) {
+    return new ChatOpenAI({
+      model: chosen.model,
+      apiKey: apiKeyOrPlaceholder(chosen.apiKey ?? undefined),
+      streaming: true,
+      configuration: { baseURL: chosen.baseUrl },
+      ...(requiresResponsesApi(chosen.model) ? { useResponsesApi: true } : {}),
+    });
+  }
   if (PROVIDER === "anthropic") {
     return new ChatAnthropic({
       model: MODEL,
@@ -328,8 +345,8 @@ function callsTheSurface(
  * Now it answers, calls what it needs, reads the results and answers again, which is what a harness
  * is for. `recursionLimit` bounds a model that would otherwise call tools in a circle.
  */
-function buildGraph(input: RunAgentInput) {
-  const model = buildModel();
+function buildGraph(input: RunAgentInput, chosen?: ManagedModel) {
+  const model = buildModel(chosen);
   const run = runAssertionOf(input);
 
   const tools = toBoundTools(input);
@@ -390,7 +407,10 @@ function buildGraph(input: RunAgentInput) {
     .compile();
 }
 
-async function runAgent(input: RunAgentInput): Promise<Response> {
+async function runAgent(
+  input: RunAgentInput,
+  chosen?: ManagedModel,
+): Promise<Response> {
   const encoder = new EventEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -408,13 +428,18 @@ async function runAgent(input: RunAgentInput): Promise<Response> {
       // is reported as RUN_ERROR through the same path as a failure mid-stream.
       await streamRun(
         async () =>
-          buildGraph(input).streamEvents(
-            { messages: toLangChainMessages(input, PROVIDER) },
+          buildGraph(input, chosen).streamEvents(
+            {
+              messages: toLangChainMessages(
+                input,
+                chosen ? "openai" : PROVIDER,
+              ),
+            },
             { version: "v2" },
           ),
         input,
         send,
-        MODEL,
+        chosen?.model ?? MODEL,
       );
 
       controller.close();
@@ -451,7 +476,7 @@ serve({
         return Response.json({ error: "Unauthorized." }, { status: 401 });
       }
       const input = (await request.json()) as RunAgentInput;
-      return runAgent(input);
+      return runAgent(input, readManagedModel(request.headers));
     }
 
     return Response.json({ error: "Not found." }, { status: 404 });

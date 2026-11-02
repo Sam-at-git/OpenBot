@@ -2070,6 +2070,7 @@ const actorAgentResolver = createActorAgentResolver({
   loadPersonalMemoryForActor,
   languageModelForActor: (actorId) => llmService.languageModelForActor(actorId),
   stageAttachmentsForActor,
+  managedModelFor: (agentId) => llmService.managedModelFor(agentId),
 });
 
 const copilotRuntime = mountCopilotRuntime(

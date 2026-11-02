@@ -14,6 +14,10 @@ import {
 import { createCopilotHonoHandler } from "@copilotkit/runtime/v2/hono";
 import { computerUploadPath } from "@openbot/shared/attachments";
 import {
+  type ManagedModel,
+  managedModelHeaders,
+} from "@openbot/shared/managed-model";
+import {
   type ComputerGuidance,
   PROVENANCE_GUIDANCE,
 } from "@openbot/shared/bot-prompt";
@@ -602,6 +606,7 @@ export async function buildAgents(
   loadPersonalMemory?: LoadPersonalMemory,
   languageModelFor?: LanguageModelForBot,
   stageAttachments?: StageAttachmentsForBot,
+  managedModelFor?: ManagedModelForBot,
 ): Promise<Record<string, AbstractAgent>> {
   let vendors: readonly string[] = [];
   try {
@@ -660,6 +665,7 @@ export async function buildAgents(
           acquireLearnedSkills,
           languageModelFor,
           stageAttachments,
+          managedModelFor,
         );
         if (loadPersonalMemory)
           built.use(new PersonalMemoryMiddleware(agent.id, loadPersonalMemory));
@@ -947,6 +953,7 @@ async function buildAgent(
   acquireLearnedSkills?: AcquireLearnedSkills,
   languageModelFor?: LanguageModelForBot,
   stageAttachments?: StageAttachmentsForBot,
+  managedModelFor?: ManagedModelForBot,
 ): Promise<AbstractAgent> {
   if (agent.type === "unavailable") {
     return new UnavailableAgent(agent);
@@ -1047,9 +1054,22 @@ async function buildAgent(
      * way to know whether it is read or how it ranks against the role. See
      * `standingInstructionsGuidance`.
      */
+    /*
+     * A Bot on OpenBot's own endpoint answers with the model an admin chose for it, sent with the request. Only
+     * there: the key never goes to an agent somebody else runs.
+     */
+    const chosen = isManagedEndpoint(agent)
+      ? await managedModelFor?.(agent.id).catch(() => undefined)
+      : undefined;
+    const dialled = chosen
+      ? {
+          ...agent,
+          headers: { ...agent.headers, ...managedModelHeaders(chosen) },
+        }
+      : agent;
     return remoteAgentWithStandingRole(
       agent,
-      await remoteTransport(agent, stallGuard, agentFetch, initiator),
+      await remoteTransport(dialled, stallGuard, agentFetch, initiator),
       granted,
       signRun,
       connectedVendors,
@@ -1293,6 +1313,22 @@ async function remoteTransport(
 
   const picked = pickFromRoster(Object.keys(roster), agent);
   return roster[picked] as AbstractAgent;
+}
+
+/** Whether this Bot runs at an endpoint OpenBot itself runs, holding OpenBot's managed agent token. */
+export function isManagedEndpoint(
+  agent: { endpoint: string; headers?: Record<string, string> },
+  environment: NodeJS.ProcessEnv = process.env,
+): boolean {
+  const token = environment.MANAGED_AGENT_TOKEN;
+  const endpoint = agent.endpoint.replace(/\/$/, "");
+  return (
+    !!token &&
+    agent.headers?.["x-openbot-agent-token"] === token &&
+    [environment.PICKED_HARNESS_URL, environment.MANAGED_AGENT_AG_UI_URL].some(
+      (url) => !!url && url.replace(/\/$/, "") === endpoint,
+    )
+  );
 }
 
 /**
@@ -1583,18 +1619,7 @@ function remoteAgentWithStandingRole(
           ]),
         ).pipe(switchMap((offered) => runWith(offered, input, next))),
       );
-      const owned =
-        !!process.env.MANAGED_AGENT_TOKEN &&
-        agent.headers?.["x-openbot-agent-token"] ===
-          process.env.MANAGED_AGENT_TOKEN &&
-        [
-          process.env.PICKED_HARNESS_URL,
-          process.env.MANAGED_AGENT_AG_UI_URL,
-        ].some(
-          (url) =>
-            url?.replace(/\/$/, "") === agent.endpoint.replace(/\/$/, ""),
-        );
-      return owned ? observeModelConnection(stream) : stream;
+      return isManagedEndpoint(agent) ? observeModelConnection(stream) : stream;
     });
     if (acquireLearnedSkills)
       target.use(
@@ -1710,6 +1735,7 @@ export async function resolveRuntimeAgents(
   loadPersonalMemory?: LoadPersonalMemory,
   languageModelFor?: LanguageModelForBot,
   stageAttachments?: StageAttachmentsForBot,
+  managedModelFor?: ManagedModelForBot,
 ): Promise<Record<string, AbstractAgent>> {
   const all = await loadAgents();
   if (all.length === 0) {
@@ -1748,6 +1774,7 @@ export async function resolveRuntimeAgents(
     loadPersonalMemory,
     languageModelFor,
     stageAttachments,
+    managedModelFor,
   );
 }
 
@@ -1762,6 +1789,14 @@ export type LoadToolsForBot = (botId: string) => Promise<GrantedTool[]>;
 export type LanguageModelForBot = (
   botId: string,
 ) => Promise<PlanLanguageModel | undefined>;
+
+/**
+ * The model a Bot that OpenBot runs in its own container answers with, when an admin chose one under Admin, Models.
+ * Undefined leaves the container on the model it was started with. Read per request, like {@link LanguageModelForBot}.
+ */
+export type ManagedModelForBot = (
+  botId: string,
+) => Promise<ManagedModel | undefined>;
 
 /**
  * Save the files attached to the message being asked about into the Bot's computer, before the model runs, and say
