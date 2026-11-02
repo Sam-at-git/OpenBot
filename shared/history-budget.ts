@@ -146,9 +146,10 @@ export function trimHistory<M>(
 }
 
 /** {@link trimHistory} for AG-UI messages, where a tool result is `role: "tool"` with string content. */
-export function trimAgUiHistory<
-  M extends { role: string; content?: unknown },
->(messages: readonly M[], budget?: HistoryBudget): M[] {
+export function trimAgUiHistory<M extends { role: string; content?: unknown }>(
+  messages: readonly M[],
+  budget?: HistoryBudget,
+): M[] {
   return trimHistory(
     messages,
     {

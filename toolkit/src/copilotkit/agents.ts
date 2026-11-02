@@ -10,6 +10,10 @@ import {
   CopilotKitIntelligence,
 } from "@copilotkit/runtime/v2";
 import {
+  historyBudgetFrom,
+  trimAgUiHistory,
+} from "@openbot/shared/history-budget";
+import {
   defer,
   finalize,
   from,
@@ -18,10 +22,6 @@ import {
   switchMap,
   takeUntil,
 } from "rxjs";
-import {
-  historyBudgetFrom,
-  trimAgUiHistory,
-} from "@openbot/shared/history-budget";
 import { sanitizeSeededHistory } from "../history-sanitize";
 import { nativeApprovalRun } from "../native-approval";
 import { historyOrEmpty } from "../thread-history";

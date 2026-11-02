@@ -15,7 +15,11 @@ function conversation(steps: number) {
     { id: "u", role: "user", content: "录入这几个人" },
   ];
   for (let step = 0; step < steps; step++) {
-    messages.push({ id: `a${step}`, role: "assistant", content: `step ${step}` });
+    messages.push({
+      id: `a${step}`,
+      role: "assistant",
+      content: `step ${step}`,
+    });
     messages.push({
       id: `t${step}`,
       role: "tool",
@@ -85,9 +89,9 @@ describe("keeping a long conversation within its budget", () => {
 
   test("a budget of 0 turns it off, and the environment sets it", () => {
     const messages = conversation(20);
-    expect(
-      trimAgUiHistory(messages, { ...budget, maxTokens: 0 }),
-    ).toEqual(messages);
+    expect(trimAgUiHistory(messages, { ...budget, maxTokens: 0 })).toEqual(
+      messages,
+    );
     expect(historyBudgetFrom({}).maxTokens).toBe(60_000);
     expect(historyBudgetFrom({ HISTORY_TOKEN_BUDGET: "40000" }).maxTokens).toBe(
       40_000,
