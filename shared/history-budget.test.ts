@@ -128,8 +128,8 @@ describe("keeping a long conversation within its budget", () => {
     );
   });
 
-  test("Chinese text counts close to a token a character", () => {
-    expect(estimateTokens("员工花名册")).toBe(5);
-    expect(estimateTokens("abcdefgh")).toBe(2);
+  test("Chinese text counts close to a token a character, erring a fifth high", () => {
+    expect(estimateTokens("员工花名册")).toBe(6);
+    expect(estimateTokens("abcdefghijklmnopqrst")).toBe(6);
   });
 });

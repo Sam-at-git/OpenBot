@@ -53,9 +53,14 @@ export function historyBudgetFrom(
   return { ...DEFAULT_HISTORY_BUDGET, maxTokens: Math.floor(value) };
 }
 
+/** How much the plain character estimate is raised by. See {@link estimateTokens}. */
+export const ESTIMATE_FACTOR = 1.2;
+
 /**
- * A rough token count, good enough to decide what to leave out: about four ASCII characters to a token, and one
- * token for anything else (Chinese text is close to one token per character).
+ * A rough token count, good enough to decide what to leave out: about four ASCII characters to a token and one token
+ * for anything else (Chinese text is close to one a character), then a fifth more. Measured on a real browser task
+ * with qwen3.8, the model counted 1.16 times the plain estimate, mostly because JSON and English split finer than
+ * four characters to a token; erring high keeps a conversation under its budget rather than just over it.
  */
 export function estimateTokens(text: string): number {
   let ascii = 0;
@@ -64,7 +69,7 @@ export function estimateTokens(text: string): number {
     if (text.charCodeAt(index) < 128) ascii++;
     else other++;
   }
-  return Math.ceil(ascii / 4) + other;
+  return Math.ceil((ascii / 4 + other) * ESTIMATE_FACTOR);
 }
 
 /** One message as this module sees it: whether it is a tool result, and its estimated size. */
