@@ -1,7 +1,11 @@
 import type { BaseEvent, RunAgentInput } from "@ag-ui/core";
 import { EventEncoder } from "@ag-ui/encoder";
 import { ChatAnthropic } from "@langchain/anthropic";
-import { type AIMessage, ToolMessage } from "@langchain/core/messages";
+import {
+  type AIMessage,
+  type BaseMessage,
+  ToolMessage,
+} from "@langchain/core/messages";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import {
   END,
@@ -12,6 +16,11 @@ import {
 import { ChatOpenAI } from "@langchain/openai";
 import { serve } from "bun";
 import { hasManagedAgentToken } from "../../shared/agent-authorisation";
+import {
+  contentText,
+  historyBudgetFrom,
+  trimHistory,
+} from "../../shared/history-budget";
 import { listenPort } from "../../shared/listen-port";
 import {
   type ManagedModel,
@@ -335,6 +344,34 @@ function callsTheSurface(
   return calls.some((call) => !ours.has(call.name));
 }
 
+const HISTORY_BUDGET = historyBudgetFrom(process.env);
+
+/**
+ * What the model is sent on each call: past the budget, the oldest tool results become a short note
+ * (`shared/history-budget.ts`). Applied before every call rather than once per run, because one run
+ * can call tools many times and grow the same way a long conversation does. The graph's own state
+ * keeps every result whole.
+ */
+function trimmedForModel(messages: BaseMessage[]): BaseMessage[] {
+  return trimHistory(
+    messages,
+    {
+      isToolResult: (message) => ToolMessage.isInstance(message),
+      text: (message) => contentText(message.content),
+      withContent: (message, content) => {
+        const tool = message as ToolMessage;
+        return new ToolMessage({
+          content,
+          tool_call_id: tool.tool_call_id,
+          ...(tool.name ? { name: tool.name } : {}),
+          ...(tool.id ? { id: tool.id } : {}),
+        });
+      },
+    },
+    HISTORY_BUDGET,
+  );
+}
+
 /**
  * The graph, with the tool loop where it belongs.
  *
@@ -355,7 +392,7 @@ function buildGraph(input: RunAgentInput, chosen?: ManagedModel) {
 
   return new StateGraph(MessagesAnnotation)
     .addNode("answer", async (state) => ({
-      messages: [await bound.invoke(state.messages)],
+      messages: [await bound.invoke(trimmedForModel(state.messages))],
     }))
     .addNode("tools", async (state) => {
       const last = state.messages.at(-1) as AIMessage;

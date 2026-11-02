@@ -18,6 +18,10 @@ import {
   switchMap,
   takeUntil,
 } from "rxjs";
+import {
+  historyBudgetFrom,
+  trimAgUiHistory,
+} from "@openbot/shared/history-budget";
 import { sanitizeSeededHistory } from "../history-sanitize";
 import { nativeApprovalRun } from "../native-approval";
 import { historyOrEmpty } from "../thread-history";
@@ -149,7 +153,14 @@ export class BuiltInAgentWithSaneHistory extends BuiltInAgent {
     const answeredByResume = new Set(
       (input.resume ?? []).map((entry) => entry.interruptId),
     );
-    const history = sanitizeSeededHistory(input.messages, answeredByResume);
+    /*
+     * Sanitised, then trimmed: past its budget, the oldest tool results go to the model as a short note instead of
+     * in full (`shared/history-budget.ts`). The stored conversation, and what the person sees, are unchanged.
+     */
+    const history = trimAgUiHistory(
+      sanitizeSeededHistory(input.messages, answeredByResume),
+      historyBudgetFrom(process.env),
+    );
     const { inline, observe } = this.hooks;
     /*
      * ALONGSIDE THE GUARD ABOVE, NOT INSTEAD OF IT. One drops a conversation the model provider is
