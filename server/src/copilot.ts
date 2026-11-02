@@ -14,13 +14,13 @@ import {
 import { createCopilotHonoHandler } from "@copilotkit/runtime/v2/hono";
 import { computerUploadPath } from "@openbot/shared/attachments";
 import {
-  type ManagedModel,
-  managedModelHeaders,
-} from "@openbot/shared/managed-model";
-import {
   type ComputerGuidance,
   PROVENANCE_GUIDANCE,
 } from "@openbot/shared/bot-prompt";
+import {
+  type ManagedModel,
+  managedModelHeaders,
+} from "@openbot/shared/managed-model";
 import {
   defaultModelFor,
   requiresResponsesApi,

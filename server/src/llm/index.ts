@@ -12,13 +12,14 @@
  * Bots OpenBot runs in its own containers (agent-bot, LangGraph) are handed the chosen model with each run (see
  * `shared/managed-model.ts`) and call it from there, so they are not counted here.
  */
-import type { ManagedModel } from "@openbot/shared/managed-model";
+
 import type {
   LlmChoice,
   LlmOverview,
   LlmPurpose,
   LlmTestResult,
 } from "@openbot/shared/llm";
+import type { ManagedModel } from "@openbot/shared/managed-model";
 import type { LanguageModelForBot } from "../copilot";
 import {
   chatModelFor,
@@ -191,7 +192,11 @@ export function createLlmService(options: {
     async managedModelFor(agentId: string): Promise<ManagedModel | undefined> {
       const target = await managedTarget(agentId).catch(() => undefined);
       return target
-        ? { baseUrl: target.baseUrl, apiKey: target.apiKey, model: target.model }
+        ? {
+            baseUrl: target.baseUrl,
+            apiKey: target.apiKey,
+            model: target.model,
+          }
         : undefined;
     },
 

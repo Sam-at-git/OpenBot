@@ -148,7 +148,10 @@ for (const framework of ["langgraph", "bot"]) {
       const answer = async (headers: Record<string, string>) => {
         const remote = new HttpAgent({
           url: `${endpoint}/ag-ui`,
-          headers: { "x-openbot-agent-token": "synthetic-managed-token", ...headers },
+          headers: {
+            "x-openbot-agent-token": "synthetic-managed-token",
+            ...headers,
+          },
         });
         const input: RunAgentInput = {
           threadId: crypto.randomUUID(),
@@ -159,9 +162,7 @@ for (const framework of ["langgraph", "bot"]) {
           state: {},
           forwardedProps: {},
         };
-        const events = await lastValueFrom(
-          remote.run(input).pipe(toArray()),
-        );
+        const events = await lastValueFrom(remote.run(input).pipe(toArray()));
         return events
           .filter((event) => event.type === "TEXT_MESSAGE_CONTENT")
           .map((event) => (event as { delta: string }).delta)

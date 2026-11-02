@@ -5,11 +5,11 @@ import type { AgentFetch, StallGuard } from "../channels/stall-guard";
 import {
   type HandoffForRun,
   type LanguageModelForBot,
-  type ManagedModelForBot,
   type LoadAgentsForActor,
   type LoadAttachment,
   type LoadInstructions,
   type LoadToolsForBot,
+  type ManagedModelForBot,
   type MarkAttachmentsSent,
   type RuntimeModel,
   resolveRuntimeAgents,
