@@ -67,12 +67,37 @@ describe("keeping a long conversation within its budget", () => {
     );
   });
 
-  test("a short result is never left out", () => {
+  test("a recent short result is kept, and an old one goes as one line", () => {
     const items = [
-      { toolResult: true, tokens: 50 },
-      ...Array.from({ length: 8 }, () => ({ toolResult: true, tokens: 3_000 })),
+      ...Array.from({ length: 30 }, () => ({ toolResult: true, tokens: 250 })),
+      ...Array.from({ length: 4 }, () => ({ toolResult: true, tokens: 3_000 })),
     ];
-    expect(toolResultsToLeaveOut(items, budget).has(0)).toBe(false);
+    const out = toolResultsToLeaveOut(items, { ...budget, block: 1 });
+    // The first ten short results are older than the last twenty tool results.
+    expect(out.has(0)).toBe(true);
+    for (let index = 14; index < 30; index++) expect(out.has(index)).toBe(false);
+    expect(
+      trimAgUiHistory(
+        [
+          { role: "tool", content: "clicked" },
+          ...Array.from({ length: 25 }, () => ({
+            role: "tool",
+            content: "y".repeat(40_000),
+          })),
+        ],
+        { ...budget, block: 1, keepRecentShort: 3 },
+      )[0]?.content,
+    ).toBe("clicked");
+  });
+
+  test("the system prompt and tools are counted before the conversation", () => {
+    const items = Array.from({ length: 10 }, () => ({
+      toolResult: true,
+      tokens: 900,
+    }));
+    // 9,000 tokens fits 10,000 on its own, but not beside a 5,000-token prompt.
+    expect(toolResultsToLeaveOut(items, budget).size).toBe(0);
+    expect(toolResultsToLeaveOut(items, budget, 5_000).size).toBeGreaterThan(0);
   });
 
   test("results are left out in whole blocks, so the cut moves rarely", () => {

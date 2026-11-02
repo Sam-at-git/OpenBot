@@ -10,6 +10,7 @@ import {
   CopilotKitIntelligence,
 } from "@copilotkit/runtime/v2";
 import {
+  estimateTokens,
   historyBudgetFrom,
   trimAgUiHistory,
 } from "@openbot/shared/history-budget";
@@ -168,6 +169,7 @@ export class BuiltInAgentWithSaneHistory extends BuiltInAgent {
       this.hooks.historyTokens
         ? { ...defaults, maxTokens: this.hooks.historyTokens }
         : defaults,
+      this.fixedTokens(input),
     );
     const { inline, observe } = this.hooks;
     /*
@@ -199,6 +201,31 @@ export class BuiltInAgentWithSaneHistory extends BuiltInAgent {
           ),
         ),
       ),
+    );
+  }
+
+  /**
+   * About how much of every call is not the conversation: the system prompt, the tools this Bot holds and the tools
+   * the surface sends. The conversation gets what is left of the budget.
+   */
+  private fixedTokens(input: RunAgentInput): number {
+    const configuration = this.configuration as {
+      prompt?: unknown;
+      tools?: readonly { name?: unknown; description?: unknown }[];
+    };
+    const prompt =
+      typeof configuration.prompt === "string" ? configuration.prompt : "";
+    const held = (configuration.tools ?? []).map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+    }));
+    // A tool's parameter schema is not reachable here as JSON; about 150 tokens each covers a typical one.
+    return (
+      estimateTokens(prompt) +
+      estimateTokens(JSON.stringify(held)) +
+      held.length * 150 +
+      estimateTokens(JSON.stringify(input.tools ?? [])) +
+      estimateTokens(JSON.stringify(input.context ?? []))
     );
   }
 

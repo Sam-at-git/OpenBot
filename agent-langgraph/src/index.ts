@@ -18,6 +18,7 @@ import { serve } from "bun";
 import { hasManagedAgentToken } from "../../shared/agent-authorisation";
 import {
   contentText,
+  estimateTokens,
   type HistoryBudget,
   historyBudgetFrom,
   trimHistory,
@@ -356,6 +357,7 @@ const HISTORY_BUDGET = historyBudgetFrom(process.env);
 function trimmedForModel(
   messages: BaseMessage[],
   budget: HistoryBudget,
+  reservedTokens: number,
 ): BaseMessage[] {
   return trimHistory(
     messages,
@@ -373,6 +375,7 @@ function trimmedForModel(
       },
     },
     budget,
+    reservedTokens,
   );
 }
 
@@ -395,12 +398,14 @@ function buildGraph(input: RunAgentInput, chosen?: ManagedModel) {
   const run = runAssertionOf(input);
 
   const tools = toBoundTools(input);
+  // The tool definitions go with every call; the standing role is already one of the messages.
+  const toolTokens = estimateTokens(JSON.stringify(tools));
   const bound = tools.length > 0 ? model.bindTools(tools) : model;
   const ours = deploymentToolsOf(input);
 
   return new StateGraph(MessagesAnnotation)
     .addNode("answer", async (state) => ({
-      messages: [await bound.invoke(trimmedForModel(state.messages, budget))],
+      messages: [await bound.invoke(trimmedForModel(state.messages, budget, toolTokens))],
     }))
     .addNode("tools", async (state) => {
       const last = state.messages.at(-1) as AIMessage;
