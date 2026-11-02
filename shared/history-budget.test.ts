@@ -75,7 +75,8 @@ describe("keeping a long conversation within its budget", () => {
     const out = toolResultsToLeaveOut(items, { ...budget, block: 1 });
     // The first ten short results are older than the last twenty tool results.
     expect(out.has(0)).toBe(true);
-    for (let index = 14; index < 30; index++) expect(out.has(index)).toBe(false);
+    for (let index = 14; index < 30; index++)
+      expect(out.has(index)).toBe(false);
     expect(
       trimAgUiHistory(
         [

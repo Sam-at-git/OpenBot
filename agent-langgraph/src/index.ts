@@ -405,7 +405,9 @@ function buildGraph(input: RunAgentInput, chosen?: ManagedModel) {
 
   return new StateGraph(MessagesAnnotation)
     .addNode("answer", async (state) => ({
-      messages: [await bound.invoke(trimmedForModel(state.messages, budget, toolTokens))],
+      messages: [
+        await bound.invoke(trimmedForModel(state.messages, budget, toolTokens)),
+      ],
     }))
     .addNode("tools", async (state) => {
       const last = state.messages.at(-1) as AIMessage;
