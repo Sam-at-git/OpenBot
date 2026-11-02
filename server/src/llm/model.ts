@@ -6,8 +6,8 @@
  * Ollama all work the same way.
  */
 import { createOpenAI } from "@ai-sdk/openai";
-import type { PlanLanguageModel } from "../agents/plan-model";
 import { modelFetch } from "@openbot/shared/model-fetch";
+import type { PlanLanguageModel } from "../agents/plan-model";
 
 type StreamResult = Awaited<ReturnType<PlanLanguageModel["doStream"]>>;
 type Part = StreamResult["stream"] extends ReadableStream<infer T> ? T : never;
