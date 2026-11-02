@@ -66,3 +66,40 @@ describe("mergeModelIds", () => {
     expect(mergeModelIds("a", ["a"])).toBe("a");
   });
 });
+
+describe("a model's conversation budget", () => {
+  test("is the fifth field, written as tokens, k or m", () => {
+    expect(
+      parseModelsText(
+        "deepseek-v4-pro | | | | 200k\nqwen3:27b | Qwen | | | 40000\nbig | | | | 1m",
+      ),
+    ).toEqual({
+      ok: true,
+      models: [
+        { id: "deepseek-v4-pro", historyTokens: 200_000 },
+        { id: "qwen3:27b", label: "Qwen", historyTokens: 40_000 },
+        { id: "big", historyTokens: 1_000_000 },
+      ],
+    });
+  });
+
+  test("outside 4k to 2m, or not a number, names its line", () => {
+    const small = parseModelsText("m | | | | 100");
+    expect(small.ok).toBe(false);
+    expect(!small.ok && small.error).toContain("Line 1");
+    expect(parseModelsText("m | | | | lots").ok).toBe(false);
+    expect(parseModelsText("m | | | | 3m").ok).toBe(false);
+  });
+
+  test("survives a round trip through the editor", () => {
+    const models = [
+      { id: "a", historyTokens: 64_000 },
+      { id: "b", label: "B", inputPricePerMillion: 1, historyTokens: 200_000 },
+      { id: "c" },
+    ];
+    expect(parseModelsText(formatModelsText(models))).toEqual({
+      ok: true,
+      models,
+    });
+  });
+});

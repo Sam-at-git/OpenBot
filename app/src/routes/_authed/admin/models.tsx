@@ -556,7 +556,7 @@ function ChoiceDialog({
 type Note = { ok: boolean; text: string };
 
 const MODELS_PLACEHOLDER =
-  "deepseek-chat\ndeepseek-reasoner | Reasoner | 0.55 | 2.19";
+  "deepseek-chat\ndeepseek-reasoner | Reasoner | 0.55 | 2.19 | 200k\nqwen3:27b | | | | 40k";
 
 function ProviderDialog({
   provider,
@@ -791,9 +791,11 @@ function ProviderDialog({
               value={modelsText}
             />
             <FieldDescription>
-              One model per line: ID | label | input price | output price. Only
-              the ID is required. Prices are per million tokens and feed the
-              cost estimate on Usage.
+              One model per line: ID | label | input price | output price |
+              conversation budget. Only the ID is required. Prices are per
+              million tokens and feed the cost estimate on Usage. The budget is
+              how much of a conversation the model reads, such as 64k. Past it,
+              the oldest tool results are shortened. Leave it empty for 60k.
             </FieldDescription>
             <div className="flex items-center gap-3">
               <Button

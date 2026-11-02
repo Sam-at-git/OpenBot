@@ -53,6 +53,11 @@ export type BuiltInAgentHooks = {
   inline?: (messages: Message[], threadId: string) => Promise<Message[]>;
   /** Watch the model connection, for a host that reports when it fails. */
   observe: (run: Observable<BaseEvent>) => Observable<BaseEvent>;
+  /**
+   * How much conversation this Bot's model is sent, in estimated tokens: the conversation budget an admin gave the
+   * model. Absent uses the deployment's default (`HISTORY_TOKEN_BUDGET`).
+   */
+  historyTokens?: number;
 };
 
 export class CloningRemoteAgent extends AbstractAgent {
@@ -157,9 +162,12 @@ export class BuiltInAgentWithSaneHistory extends BuiltInAgent {
      * Sanitised, then trimmed: past its budget, the oldest tool results go to the model as a short note instead of
      * in full (`shared/history-budget.ts`). The stored conversation, and what the person sees, are unchanged.
      */
+    const defaults = historyBudgetFrom(process.env);
     const history = trimAgUiHistory(
       sanitizeSeededHistory(input.messages, answeredByResume),
-      historyBudgetFrom(process.env),
+      this.hooks.historyTokens
+        ? { ...defaults, maxTokens: this.hooks.historyTokens }
+        : defaults,
     );
     const { inline, observe } = this.hooks;
     /*

@@ -68,6 +68,14 @@ describe("what an admin sends", () => {
     ).toBe(false);
     expect(parseModels([{ id: "m", inputPricePerMillion: -1 }]).ok).toBe(false);
     expect(parseModels([{ label: "no id" }]).ok).toBe(false);
+    expect(parseModels([{ id: "m", historyTokens: 64_000 }])).toEqual({
+      ok: true,
+      value: [{ id: "m", historyTokens: 64_000 }],
+    });
+    expect(parseModels([{ id: "m", historyTokens: 10 }]).ok).toBe(false);
+    expect(parseModels([{ id: "m", historyTokens: 1.5e4 + 0.5 }]).ok).toBe(
+      false,
+    );
   });
 
   test("settings name a provider and a model, or nothing", () => {
@@ -201,7 +209,7 @@ describe("which model a call uses", () => {
       name: "Ollama",
       baseUrl: "http://host.docker.internal:11434/v1",
       apiKey: null,
-      models: [{ id: "qwen" }],
+      models: [{ id: "qwen", historyTokens: 40_000 }],
       enabled: true,
     },
     {
@@ -263,6 +271,7 @@ describe("which model a call uses", () => {
       baseUrl: "http://host.docker.internal:11434/v1",
       apiKey: null,
       model: "qwen",
+      historyTokens: 40_000,
     });
     expect(await llm.managedModelFor("contracts")).toEqual({
       baseUrl: "https://api.deepseek.com/v1",
@@ -271,6 +280,18 @@ describe("which model a call uses", () => {
     });
     const { llm: none } = service({ default: null, auxiliary: null, bots: {} });
     expect(await none.managedModelFor("contracts")).toBeUndefined();
+  });
+
+  test("a Bot's conversation budget is its model's, and the default when it has none", async () => {
+    const { llm } = service({
+      default: { providerId: "deepseek", model: "deepseek-chat" },
+      auxiliary: null,
+      bots: { knowledge: { providerId: "ollama", model: "qwen" } },
+    });
+    expect(await llm.historyTokensFor("knowledge")).toBe(40_000);
+    expect(await llm.historyTokensFor("general")).toBeUndefined();
+    const { llm: none } = service({ default: null, auxiliary: null, bots: {} });
+    expect(await none.historyTokensFor("general")).toBeUndefined();
   });
 
   test("a provider that is off is skipped, and a started-with model that is not chat-compatible is left alone", async () => {

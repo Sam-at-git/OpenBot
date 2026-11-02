@@ -606,7 +606,7 @@ export async function buildAgents(
   loadPersonalMemory?: LoadPersonalMemory,
   languageModelFor?: LanguageModelForBot,
   stageAttachments?: StageAttachmentsForBot,
-  managedModelFor?: ManagedModelForBot,
+  modelChoice?: ModelChoiceForBot,
 ): Promise<Record<string, AbstractAgent>> {
   let vendors: readonly string[] = [];
   try {
@@ -665,7 +665,7 @@ export async function buildAgents(
           acquireLearnedSkills,
           languageModelFor,
           stageAttachments,
-          managedModelFor,
+          modelChoice,
         );
         if (loadPersonalMemory)
           built.use(new PersonalMemoryMiddleware(agent.id, loadPersonalMemory));
@@ -953,7 +953,7 @@ async function buildAgent(
   acquireLearnedSkills?: AcquireLearnedSkills,
   languageModelFor?: LanguageModelForBot,
   stageAttachments?: StageAttachmentsForBot,
-  managedModelFor?: ManagedModelForBot,
+  modelChoice?: ModelChoiceForBot,
 ): Promise<AbstractAgent> {
   if (agent.type === "unavailable") {
     return new UnavailableAgent(agent);
@@ -966,6 +966,11 @@ async function buildAgent(
   // Counted per run as well, so the reply can show the model and tokens of its own turn.
   const usage = adminModel ? runUsage(adminModel) : undefined;
   const chosenModel = usage?.model;
+  // How much of a long conversation that model is sent, when an admin gave it a budget.
+  const historyTokens =
+    agent.type === "built_in"
+      ? await modelChoice?.historyTokens(agent.id).catch(() => undefined)
+      : undefined;
   // Where this person's attached files go in this Bot's computer, when it has one. A Bot this
   // deployment runs at the managed endpoint uses the same computer through its tool callback.
   const stage = await stageAttachments?.(agent.id);
@@ -1059,7 +1064,7 @@ async function buildAgent(
      * there: the key never goes to an agent somebody else runs.
      */
     const chosen = isManagedEndpoint(agent)
-      ? await managedModelFor?.(agent.id).catch(() => undefined)
+      ? await modelChoice?.managedModel(agent.id).catch(() => undefined)
       : undefined;
     const dialled = chosen
       ? {
@@ -1115,6 +1120,7 @@ async function buildAgent(
         learnedSkills,
       ),
       {
+        ...(historyTokens ? { historyTokens } : {}),
         observe: usage
           ? (stream: Observable<BaseEvent>) =>
               usage.observe(observeModelConnection(stream))
@@ -1735,7 +1741,7 @@ export async function resolveRuntimeAgents(
   loadPersonalMemory?: LoadPersonalMemory,
   languageModelFor?: LanguageModelForBot,
   stageAttachments?: StageAttachmentsForBot,
-  managedModelFor?: ManagedModelForBot,
+  modelChoice?: ModelChoiceForBot,
 ): Promise<Record<string, AbstractAgent>> {
   const all = await loadAgents();
   if (all.length === 0) {
@@ -1774,7 +1780,7 @@ export async function resolveRuntimeAgents(
     loadPersonalMemory,
     languageModelFor,
     stageAttachments,
-    managedModelFor,
+    modelChoice,
   );
 }
 
@@ -1797,6 +1803,16 @@ export type LanguageModelForBot = (
 export type ManagedModelForBot = (
   botId: string,
 ) => Promise<ManagedModel | undefined>;
+
+/** What an admin chose about each Bot's model under Admin, Models, read per request. */
+export type ModelChoiceForBot = {
+  managedModel: ManagedModelForBot;
+  /**
+   * How much conversation a built-in Bot's model is sent (`shared/history-budget.ts`). Undefined uses the
+   * deployment's default.
+   */
+  historyTokens: (botId: string) => Promise<number | undefined>;
+};
 
 /**
  * Save the files attached to the message being asked about into the Bot's computer, before the model runs, and say

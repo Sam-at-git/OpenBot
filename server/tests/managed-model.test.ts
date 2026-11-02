@@ -17,6 +17,10 @@ describe("the model handed to a Bot in its own container", () => {
     expect(readManagedModel(new Headers(managedModelHeaders(chosen)))).toEqual(
       chosen,
     );
+    const budgeted = { ...chosen, historyTokens: 200_000 };
+    expect(
+      readManagedModel(new Headers(managedModelHeaders(budgeted))),
+    ).toEqual(budgeted);
     const keyless = { ...chosen, apiKey: null, model: "qwen3:模型" };
     expect(readManagedModel(new Headers(managedModelHeaders(keyless)))).toEqual(
       keyless,

@@ -12,12 +12,15 @@ export type ManagedModel = {
   baseUrl: string;
   apiKey: string | null;
   model: string;
+  /** The conversation budget an admin gave this model (`shared/history-budget.ts`). Absent uses the default. */
+  historyTokens?: number;
 };
 
 export const MANAGED_MODEL_HEADERS = {
   baseUrl: "x-openbot-model-base-url",
   apiKey: "x-openbot-model-key",
   model: "x-openbot-model",
+  historyTokens: "x-openbot-history-tokens",
 } as const;
 
 /** Header values are ASCII only, and a model name need not be, so each value is percent-encoded. */
@@ -29,6 +32,9 @@ export function managedModelHeaders(
     [MANAGED_MODEL_HEADERS.model]: encodeURIComponent(chosen.model),
     ...(chosen.apiKey
       ? { [MANAGED_MODEL_HEADERS.apiKey]: encodeURIComponent(chosen.apiKey) }
+      : {}),
+    ...(chosen.historyTokens
+      ? { [MANAGED_MODEL_HEADERS.historyTokens]: String(chosen.historyTokens) }
       : {}),
   };
 }
@@ -53,5 +59,13 @@ export function readManagedModel(headers: Headers): ManagedModel | undefined {
   } catch {
     return undefined;
   }
-  return { baseUrl, model, apiKey: read(MANAGED_MODEL_HEADERS.apiKey) ?? null };
+  const history = Number(read(MANAGED_MODEL_HEADERS.historyTokens));
+  return {
+    baseUrl,
+    model,
+    apiKey: read(MANAGED_MODEL_HEADERS.apiKey) ?? null,
+    ...(Number.isInteger(history) && history > 0
+      ? { historyTokens: history }
+      : {}),
+  };
 }

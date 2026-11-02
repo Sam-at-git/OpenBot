@@ -38,6 +38,20 @@ function parsePrice(value: unknown): number | undefined | null {
     : null;
 }
 
+export const MIN_HISTORY_TOKENS = 4_000;
+export const MAX_HISTORY_TOKENS = 2_000_000;
+
+/** Undefined when absent, null when present and not a whole number in range. */
+function parseHistoryTokens(value: unknown): number | undefined | null {
+  if (value === undefined || value === null || value === "") return undefined;
+  return typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= MIN_HISTORY_TOKENS &&
+    value <= MAX_HISTORY_TOKENS
+    ? value
+    : null;
+}
+
 export function parseModels(value: unknown): Parsed<LlmModelEntry[]> {
   if (!Array.isArray(value) || value.length > MAX_MODELS)
     return { ok: false, error: `Models are a list of up to ${MAX_MODELS}.` };
@@ -55,6 +69,12 @@ export function parseModels(value: unknown): Parsed<LlmModelEntry[]> {
     const output = parsePrice(item.outputPricePerMillion);
     if (input === null || output === null)
       return { ok: false, error: "A price is a number of zero or more." };
+    const history = parseHistoryTokens(item.historyTokens);
+    if (history === null)
+      return {
+        ok: false,
+        error: `A conversation budget is a whole number of tokens from ${MIN_HISTORY_TOKENS} to ${MAX_HISTORY_TOKENS}.`,
+      };
     models.push({
       id,
       ...(typeof item.label === "string" && item.label.trim()
@@ -62,6 +82,7 @@ export function parseModels(value: unknown): Parsed<LlmModelEntry[]> {
         : {}),
       ...(input === undefined ? {} : { inputPricePerMillion: input }),
       ...(output === undefined ? {} : { outputPricePerMillion: output }),
+      ...(history === undefined ? {} : { historyTokens: history }),
     });
   }
   return { ok: true, value: models };

@@ -9,7 +9,7 @@ import {
   type LoadAttachment,
   type LoadInstructions,
   type LoadToolsForBot,
-  type ManagedModelForBot,
+  type ModelChoiceForBot,
   type MarkAttachmentsSent,
   type RuntimeModel,
   resolveRuntimeAgents,
@@ -80,7 +80,7 @@ export type ActorAgentResolverDependencies = {
   /** Where this person's attached files go in each built-in Bot's computer (index.ts). */
   stageAttachmentsForActor?: (actorId: string) => StageAttachmentsForBot;
   /** The model each Bot on OpenBot's own endpoint answers with, when an admin chose one (llm/). */
-  managedModelFor?: ManagedModelForBot;
+  modelChoice?: ModelChoiceForBot;
 };
 
 /**
@@ -135,7 +135,7 @@ export function createActorAgentResolver(
       deps.loadPersonalMemoryForActor?.(actor.id),
       deps.languageModelForActor?.(actor.id),
       deps.stageAttachmentsForActor?.(actor.id),
-      deps.managedModelFor,
+      deps.modelChoice,
     ).then((agents) => {
       const loadName = deps.loadNameForActor;
       if (loadName) {

@@ -144,6 +144,17 @@ export function createLlmService(options: {
         ...usage,
       });
 
+  /** The conversation budget an admin gave this model on its provider, if any. */
+  async function historyTokensOf(
+    target: LlmTarget & { builtIn?: true },
+  ): Promise<number | undefined> {
+    if (target.builtIn) return undefined;
+    const { providers } = await snapshot();
+    return providers
+      .get(target.providerId)
+      ?.models.find((model) => model.id === target.model)?.historyTokens;
+  }
+
   /** Where a Bot's calls go: its own choice, then the default, then the started-with model. */
   async function botTarget(
     agentId: string,
@@ -191,13 +202,23 @@ export function createLlmService(options: {
     /** For the agent resolver: the model to hand a Bot OpenBot runs in its own container, if an admin chose one. */
     async managedModelFor(agentId: string): Promise<ManagedModel | undefined> {
       const target = await managedTarget(agentId).catch(() => undefined);
-      return target
-        ? {
-            baseUrl: target.baseUrl,
-            apiKey: target.apiKey,
-            model: target.model,
-          }
-        : undefined;
+      if (!target) return undefined;
+      const historyTokens = await historyTokensOf(target);
+      return {
+        baseUrl: target.baseUrl,
+        apiKey: target.apiKey,
+        model: target.model,
+        ...(historyTokens ? { historyTokens } : {}),
+      };
+    },
+
+    /**
+     * How much conversation a built-in Bot's model is sent: the conversation budget an admin gave that model under
+     * Admin, Models. Undefined (the started-with model, or no budget given) uses the deployment's default.
+     */
+    async historyTokensFor(agentId: string): Promise<number | undefined> {
+      const target = await botTarget(agentId).catch(() => undefined);
+      return target ? historyTokensOf(target) : undefined;
     },
 
     /** For the agent resolver: each built-in Bot's model for this person, counting its usage. */

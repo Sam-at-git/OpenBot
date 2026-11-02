@@ -1,8 +1,9 @@
 import type { LlmModelEntry } from "@openbot/shared/llm";
 
 /**
- * The models editor on Admin, Models: one model per line, `id | label | input price | output price`, where only the
- * ID is required. Prices are per million tokens.
+ * The models editor on Admin, Models: one model per line, `id | label | input price | output price | conversation
+ * budget`, where only the ID is required. Prices are per million tokens; the budget is in tokens, and `64k` or `1m`
+ * may be written for it.
  */
 
 /** One line per model. Trailing empty fields are left off, so a bare ID stays a bare ID. */
@@ -18,6 +19,7 @@ export function formatModelsText(models: readonly LlmModelEntry[]): string {
         model.outputPricePerMillion === undefined
           ? ""
           : String(model.outputPricePerMillion),
+        model.historyTokens === undefined ? "" : String(model.historyTokens),
       ];
       while (fields.length > 1 && fields[fields.length - 1] === "") {
         fields.pop();
@@ -25,6 +27,26 @@ export function formatModelsText(models: readonly LlmModelEntry[]): string {
       return fields.join(" | ");
     })
     .join("\n");
+}
+
+/** A budget such as `60000`, `64k` or `1m`, as a whole number of tokens. */
+function budget(
+  text: string | undefined,
+  line: number,
+): number | undefined | string {
+  const trimmed = (text ?? "").trim().toLowerCase();
+  if (trimmed === "") return undefined;
+  const match = /^(\d+(?:\.\d+)?)\s*([km]?)$/.exec(trimmed);
+  const value = match
+    ? Math.round(
+        Number(match[1]) *
+          (match[2] === "k" ? 1_000 : match[2] === "m" ? 1_000_000 : 1),
+      )
+    : Number.NaN;
+  if (!Number.isFinite(value) || value < 4_000 || value > 2_000_000) {
+    return `Line ${line}: "${trimmed}" isn't a conversation budget. Use a number of tokens from 4000 to 2000000, such as 64k.`;
+  }
+  return value;
 }
 
 export type ParsedModels =
@@ -56,14 +78,14 @@ export function parseModelsText(text: string): ParsedModels {
   for (const [index, raw] of lines.entries()) {
     const line = index + 1;
     if (raw.trim() === "") continue;
-    const [id = "", label = "", input, output, ...rest] = raw
+    const [id = "", label = "", input, output, history, ...rest] = raw
       .split("|")
       .map((field) => field.trim());
     if (id === "") {
       return { ok: false, error: `Line ${line} has no model ID.` };
     }
     if (rest.length > 0) {
-      return { ok: false, error: `Line ${line} has more than four fields.` };
+      return { ok: false, error: `Line ${line} has more than five fields.` };
     }
     const inputPrice = price(input, line);
     if (typeof inputPrice === "string") {
@@ -73,6 +95,10 @@ export function parseModelsText(text: string): ParsedModels {
     if (typeof outputPrice === "string") {
       return { ok: false, error: outputPrice };
     }
+    const historyTokens = budget(history, line);
+    if (typeof historyTokens === "string") {
+      return { ok: false, error: historyTokens };
+    }
     if (seen.has(id)) continue;
     seen.add(id);
 
@@ -80,6 +106,7 @@ export function parseModelsText(text: string): ParsedModels {
     if (label !== "") model.label = label;
     if (inputPrice !== undefined) model.inputPricePerMillion = inputPrice;
     if (outputPrice !== undefined) model.outputPricePerMillion = outputPrice;
+    if (historyTokens !== undefined) model.historyTokens = historyTokens;
     models.push(model);
   }
 

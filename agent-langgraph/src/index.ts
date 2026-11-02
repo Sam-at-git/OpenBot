@@ -18,6 +18,7 @@ import { serve } from "bun";
 import { hasManagedAgentToken } from "../../shared/agent-authorisation";
 import {
   contentText,
+  type HistoryBudget,
   historyBudgetFrom,
   trimHistory,
 } from "../../shared/history-budget";
@@ -352,7 +353,10 @@ const HISTORY_BUDGET = historyBudgetFrom(process.env);
  * can call tools many times and grow the same way a long conversation does. The graph's own state
  * keeps every result whole.
  */
-function trimmedForModel(messages: BaseMessage[]): BaseMessage[] {
+function trimmedForModel(
+  messages: BaseMessage[],
+  budget: HistoryBudget,
+): BaseMessage[] {
   return trimHistory(
     messages,
     {
@@ -368,7 +372,7 @@ function trimmedForModel(messages: BaseMessage[]): BaseMessage[] {
         });
       },
     },
-    HISTORY_BUDGET,
+    budget,
   );
 }
 
@@ -384,6 +388,10 @@ function trimmedForModel(messages: BaseMessage[]): BaseMessage[] {
  */
 function buildGraph(input: RunAgentInput, chosen?: ManagedModel) {
   const model = buildModel(chosen);
+  // The budget an admin gave the chosen model, else this container's default.
+  const budget = chosen?.historyTokens
+    ? { ...HISTORY_BUDGET, maxTokens: chosen.historyTokens }
+    : HISTORY_BUDGET;
   const run = runAssertionOf(input);
 
   const tools = toBoundTools(input);
@@ -392,7 +400,7 @@ function buildGraph(input: RunAgentInput, chosen?: ManagedModel) {
 
   return new StateGraph(MessagesAnnotation)
     .addNode("answer", async (state) => ({
-      messages: [await bound.invoke(trimmedForModel(state.messages))],
+      messages: [await bound.invoke(trimmedForModel(state.messages, budget))],
     }))
     .addNode("tools", async (state) => {
       const last = state.messages.at(-1) as AIMessage;
