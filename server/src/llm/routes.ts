@@ -6,6 +6,10 @@ import type {
 } from "@openbot/shared/llm";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
+import {
+  REASONING_EFFORTS,
+  reasoningEffortFrom,
+} from "@openbot/shared/model-fetch";
 import { type AuditStore, recordAuditEvent } from "../audit";
 import { type AppVariables, requireAdmin } from "../auth/guards";
 import type { LlmService } from ".";
@@ -75,6 +79,17 @@ export function parseModels(value: unknown): Parsed<LlmModelEntry[]> {
         ok: false,
         error: `A conversation budget is a whole number of tokens from ${MIN_HISTORY_TOKENS} to ${MAX_HISTORY_TOKENS}.`,
       };
+    const thinking =
+      item.reasoningEffort === undefined ||
+      item.reasoningEffort === null ||
+      item.reasoningEffort === ""
+        ? undefined
+        : (reasoningEffortFrom(item.reasoningEffort) ?? null);
+    if (thinking === null)
+      return {
+        ok: false,
+        error: `A thinking level is one of ${REASONING_EFFORTS.join(", ")}.`,
+      };
     models.push({
       id,
       ...(typeof item.label === "string" && item.label.trim()
@@ -83,6 +98,7 @@ export function parseModels(value: unknown): Parsed<LlmModelEntry[]> {
       ...(input === undefined ? {} : { inputPricePerMillion: input }),
       ...(output === undefined ? {} : { outputPricePerMillion: output }),
       ...(history === undefined ? {} : { historyTokens: history }),
+      ...(thinking === undefined ? {} : { reasoningEffort: thinking }),
     });
   }
   return { ok: true, value: models };

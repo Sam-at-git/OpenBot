@@ -1,9 +1,13 @@
 import type { LlmModelEntry } from "@openbot/shared/llm";
+import {
+  REASONING_EFFORTS,
+  reasoningEffortFrom,
+} from "@openbot/shared/model-fetch";
 
 /**
  * The models editor on Admin, Models: one model per line, `id | label | input price | output price | conversation
- * budget`, where only the ID is required. Prices are per million tokens; the budget is in tokens, and `64k` or `1m`
- * may be written for it.
+ * budget | thinking`, where only the ID is required. Prices are per million tokens; the budget is in tokens, and `64k`
+ * or `1m` may be written for it. Thinking is a level such as `low` or `none`.
  */
 
 /** One line per model. Trailing empty fields are left off, so a bare ID stays a bare ID. */
@@ -20,6 +24,7 @@ export function formatModelsText(models: readonly LlmModelEntry[]): string {
           ? ""
           : String(model.outputPricePerMillion),
         model.historyTokens === undefined ? "" : String(model.historyTokens),
+        model.reasoningEffort ?? "",
       ];
       while (fields.length > 1 && fields[fields.length - 1] === "") {
         fields.pop();
@@ -78,14 +83,14 @@ export function parseModelsText(text: string): ParsedModels {
   for (const [index, raw] of lines.entries()) {
     const line = index + 1;
     if (raw.trim() === "") continue;
-    const [id = "", label = "", input, output, history, ...rest] = raw
+    const [id = "", label = "", input, output, history, thinking, ...rest] = raw
       .split("|")
       .map((field) => field.trim());
     if (id === "") {
       return { ok: false, error: `Line ${line} has no model ID.` };
     }
     if (rest.length > 0) {
-      return { ok: false, error: `Line ${line} has more than five fields.` };
+      return { ok: false, error: `Line ${line} has more than six fields.` };
     }
     const inputPrice = price(input, line);
     if (typeof inputPrice === "string") {
@@ -99,6 +104,14 @@ export function parseModelsText(text: string): ParsedModels {
     if (typeof historyTokens === "string") {
       return { ok: false, error: historyTokens };
     }
+    const reasoningEffort =
+      (thinking ?? "") === "" ? undefined : reasoningEffortFrom(thinking);
+    if (thinking && !reasoningEffort) {
+      return {
+        ok: false,
+        error: `Line ${line}: "${thinking}" isn't a thinking level. Use one of ${REASONING_EFFORTS.join(", ")}.`,
+      };
+    }
     if (seen.has(id)) continue;
     seen.add(id);
 
@@ -107,6 +120,7 @@ export function parseModelsText(text: string): ParsedModels {
     if (inputPrice !== undefined) model.inputPricePerMillion = inputPrice;
     if (outputPrice !== undefined) model.outputPricePerMillion = outputPrice;
     if (historyTokens !== undefined) model.historyTokens = historyTokens;
+    if (reasoningEffort !== undefined) model.reasoningEffort = reasoningEffort;
     models.push(model);
   }
 

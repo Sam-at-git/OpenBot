@@ -8,6 +8,7 @@ import {
   type ManagedModel,
   readManagedModel,
 } from "../../shared/managed-model";
+import { modelFetchWith } from "../../shared/model-fetch";
 import {
   apiKeyOrPlaceholder,
   botSettings,
@@ -147,6 +148,8 @@ function modelFor(chosen?: ManagedModel): { client: OpenAI; model: string } {
     client: new OpenAI({
       apiKey: apiKeyOrPlaceholder(chosen.apiKey ?? undefined),
       baseURL: chosen.baseUrl,
+      // The thinking level an admin set for this model goes on every call; see `shared/model-fetch.ts`.
+      fetch: modelFetchWith({ reasoningEffort: chosen.reasoningEffort }),
     }),
     model: chosen.model,
   };

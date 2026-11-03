@@ -6,7 +6,10 @@
  * Ollama all work the same way.
  */
 import { createOpenAI } from "@ai-sdk/openai";
-import { modelFetch } from "@openbot/shared/model-fetch";
+import {
+  modelFetchWith,
+  type ReasoningEffort,
+} from "@openbot/shared/model-fetch";
 import type { PlanLanguageModel } from "../agents/plan-model";
 
 type StreamResult = Awaited<ReturnType<PlanLanguageModel["doStream"]>>;
@@ -18,6 +21,8 @@ export type LlmTarget = {
   baseUrl: string;
   apiKey: string | null;
   model: string;
+  /** The thinking level an admin set for this model, sent as `reasoning_effort` on every call. */
+  reasoningEffort?: ReasoningEffort;
 };
 
 export type UsageCount = { inputTokens: number; outputTokens: number };
@@ -94,8 +99,9 @@ export function chatModelFor(target: LlmTarget): PlanLanguageModel {
     baseURL: target.baseUrl,
     apiKey: target.apiKey || "not-needed",
     name: `openbot-${target.providerId}`,
-    // A local model can be silent for minutes before its first token; see `shared/model-fetch.ts`.
-    fetch: modelFetch,
+    // A local model can be silent for minutes before its first token, and the thinking level goes on every call; see
+    // `shared/model-fetch.ts`.
+    fetch: modelFetchWith({ reasoningEffort: target.reasoningEffort }),
   });
   return provider.chat(target.model) as unknown as PlanLanguageModel;
 }

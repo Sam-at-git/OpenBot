@@ -5,6 +5,7 @@ import {
 } from "@copilotkit/runtime/v2";
 import { computerUploadPath } from "@openbot/shared/attachments";
 import { computerGuidance } from "@openbot/shared/bot-prompt";
+import { reasoningEffortFrom } from "@openbot/shared/model-fetch";
 import { isPersonBrowserId } from "@openbot/shared/openbot-browser";
 import { workOwner } from "@openbot/shared/work-owner";
 import { createTurnRunner } from "@openbot/toolkit/run-turn";
@@ -796,6 +797,7 @@ const llmService = createLlmService({
       runtimeModel.provider === "openai" &&
       !runtimeModel.plan &&
       process.env.COPILOTKIT_OPENAI_API?.trim() === "chat",
+    reasoningEffort: reasoningEffortFrom(process.env.BOT_REASONING_EFFORT),
     resolveApiKey: () =>
       resolveModelApiKey({
         encryptionKey: config.keyEncryptionKey,

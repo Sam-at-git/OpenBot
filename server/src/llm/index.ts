@@ -20,6 +20,7 @@ import type {
   LlmTestResult,
 } from "@openbot/shared/llm";
 import type { ManagedModel } from "@openbot/shared/managed-model";
+import type { ReasoningEffort } from "@openbot/shared/model-fetch";
 import type { LanguageModelForBot } from "../copilot";
 import {
   chatModelFor,
@@ -46,6 +47,8 @@ export type BuiltInModel = {
    */
   chatCompatible: boolean;
   resolveApiKey: () => Promise<string | null>;
+  /** The started-with model's thinking level (`BOT_REASONING_EFFORT`), if one was set. */
+  reasoningEffort?: ReasoningEffort;
 };
 
 /** `${base}/chat/completions`, accepting a base URL with or without its trailing slash. */
@@ -100,11 +103,15 @@ export function createLlmService(options: {
     if (!choice?.model) return undefined;
     const provider = providers.get(choice.providerId);
     if (!provider?.enabled) return undefined;
+    const reasoningEffort = provider.models.find(
+      (model) => model.id === choice.model,
+    )?.reasoningEffort;
     return {
       providerId: provider.id,
       baseUrl: provider.baseUrl,
       apiKey: provider.apiKey,
       model: choice.model,
+      ...(reasoningEffort ? { reasoningEffort } : {}),
     };
   };
 
@@ -119,6 +126,9 @@ export function createLlmService(options: {
       baseUrl: builtIn.baseUrl ?? "https://api.openai.com/v1",
       apiKey: await builtIn.resolveApiKey(),
       model: builtIn.model,
+      ...(builtIn.reasoningEffort
+        ? { reasoningEffort: builtIn.reasoningEffort }
+        : {}),
     };
   };
 
@@ -209,6 +219,9 @@ export function createLlmService(options: {
         apiKey: target.apiKey,
         model: target.model,
         ...(historyTokens ? { historyTokens } : {}),
+        ...(target.reasoningEffort
+          ? { reasoningEffort: target.reasoningEffort }
+          : {}),
       };
     },
 

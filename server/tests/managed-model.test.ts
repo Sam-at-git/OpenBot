@@ -17,7 +17,11 @@ describe("the model handed to a Bot in its own container", () => {
     expect(readManagedModel(new Headers(managedModelHeaders(chosen)))).toEqual(
       chosen,
     );
-    const budgeted = { ...chosen, historyTokens: 200_000 };
+    const budgeted = {
+      ...chosen,
+      historyTokens: 200_000,
+      reasoningEffort: "low" as const,
+    };
     expect(
       readManagedModel(new Headers(managedModelHeaders(budgeted))),
     ).toEqual(budgeted);
@@ -69,15 +73,25 @@ describe("the model handed to a Bot in its own container", () => {
 
 /** An OpenAI-compatible endpoint that answers every call with one word and remembers what it was asked. */
 function provider(word: string) {
-  const seen: { model: string; authorization: string | null }[] = [];
+  const seen: {
+    model: string;
+    authorization: string | null;
+    reasoningEffort?: string;
+  }[] = [];
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
-      const body = (await request.json()) as { model: string };
+      const body = (await request.json()) as {
+        model: string;
+        reasoning_effort?: string;
+      };
       seen.push({
         model: body.model,
         authorization: request.headers.get("authorization"),
+        ...(body.reasoning_effort
+          ? { reasoningEffort: body.reasoning_effort }
+          : {}),
       });
       const base = {
         id: "chat",
@@ -179,11 +193,16 @@ for (const framework of ["langgraph", "bot"]) {
             baseUrl: chosen.url,
             apiKey: "chosen-key",
             model: "deepseek-chat",
+            reasoningEffort: "low",
           }),
         ),
       ).toBe("chosen");
       expect(chosen.seen).toEqual([
-        { model: "deepseek-chat", authorization: "Bearer chosen-key" },
+        {
+          model: "deepseek-chat",
+          authorization: "Bearer chosen-key",
+          reasoningEffort: "low",
+        },
       ]);
       expect(started.seen).toEqual([]);
 

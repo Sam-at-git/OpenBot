@@ -556,7 +556,7 @@ function ChoiceDialog({
 type Note = { ok: boolean; text: string };
 
 const MODELS_PLACEHOLDER =
-  "deepseek-chat\ndeepseek-reasoner | Reasoner | 0.55 | 2.19 | 200k\nqwen3:27b | | | | 40k";
+  "deepseek-chat\ndeepseek-reasoner | Reasoner | 0.55 | 2.19 | 200k\nqwen3:27b | | | | 40k | low";
 
 function ProviderDialog({
   provider,
@@ -792,10 +792,13 @@ function ProviderDialog({
             />
             <FieldDescription>
               One model per line: ID | label | input price | output price |
-              conversation budget. Only the ID is required. Prices are per
-              million tokens and feed the cost estimate on Usage. The budget is
-              how much of a conversation the model reads, such as 64k. Past it,
-              the oldest tool results are shortened. Leave it empty for 80k.
+              conversation budget | thinking. Only the ID is required. Prices
+              are per million tokens and feed the cost estimate on Usage. The
+              budget is how much of a conversation the model reads, such as 64k.
+              Past it, the oldest tool results are shortened. Leave it empty for
+              80k. Thinking sets how much the model reasons before each step:
+              none, minimal, low, medium, high or xhigh. Less thinking answers
+              faster. Leave it empty to use the model's own default.
             </FieldDescription>
             <div className="flex items-center gap-3">
               <Button

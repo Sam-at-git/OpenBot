@@ -103,3 +103,24 @@ describe("a model's conversation budget", () => {
     });
   });
 });
+
+describe("a model's thinking level", () => {
+  test("is the sixth field, and survives a round trip", () => {
+    const parsed = parseModelsText("qwen3.8:27b-mlx | | | | 80k | Low\nfast | | | | | none");
+    expect(parsed).toEqual({
+      ok: true,
+      models: [
+        { id: "qwen3.8:27b-mlx", historyTokens: 80_000, reasoningEffort: "low" },
+        { id: "fast", reasoningEffort: "none" },
+      ],
+    });
+    if (parsed.ok)
+      expect(parseModelsText(formatModelsText(parsed.models))).toEqual(parsed);
+  });
+
+  test("an unknown level, or a seventh field, names its line", () => {
+    const wrong = parseModelsText("m | | | | | lots");
+    expect(!wrong.ok && wrong.error).toContain("Line 1");
+    expect(parseModelsText("m | | | | | low | extra").ok).toBe(false);
+  });
+});

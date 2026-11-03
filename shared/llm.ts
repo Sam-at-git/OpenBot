@@ -4,6 +4,8 @@
  * Ollama, and most others do.
  */
 
+import type { ReasoningEffort } from "./model-fetch";
+
 /** One model a provider offers. Prices are optional and only feed the cost estimate on Admin, Usage. */
 export type LlmModelEntry = {
   id: string;
@@ -17,6 +19,11 @@ export type LlmModelEntry = {
    * note (`shared/history-budget.ts`). Absent uses the deployment's default (`HISTORY_TOKEN_BUDGET`, 80k).
    */
   historyTokens?: number;
+  /**
+   * How much this model thinks before it answers (`reasoning_effort`), one of `REASONING_EFFORTS` in
+   * `shared/model-fetch.ts`. Absent sends nothing, so the model uses its own default.
+   */
+  reasoningEffort?: ReasoningEffort;
 };
 
 export type LlmProvider = {

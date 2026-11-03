@@ -8,12 +8,16 @@
  *
  * Every provider on Admin, Models speaks the OpenAI-compatible chat API, so this is a base URL, a key and a model.
  */
+
+import { type ReasoningEffort, reasoningEffortFrom } from "./model-fetch";
 export type ManagedModel = {
   baseUrl: string;
   apiKey: string | null;
   model: string;
   /** The conversation budget an admin gave this model (`shared/history-budget.ts`). Absent uses the default. */
   historyTokens?: number;
+  /** The thinking level an admin gave this model (`shared/model-fetch.ts`). Absent sends none. */
+  reasoningEffort?: ReasoningEffort;
 };
 
 export const MANAGED_MODEL_HEADERS = {
@@ -21,6 +25,7 @@ export const MANAGED_MODEL_HEADERS = {
   apiKey: "x-openbot-model-key",
   model: "x-openbot-model",
   historyTokens: "x-openbot-history-tokens",
+  reasoningEffort: "x-openbot-reasoning-effort",
 } as const;
 
 /** Header values are ASCII only, and a model name need not be, so each value is percent-encoded. */
@@ -35,6 +40,9 @@ export function managedModelHeaders(
       : {}),
     ...(chosen.historyTokens
       ? { [MANAGED_MODEL_HEADERS.historyTokens]: String(chosen.historyTokens) }
+      : {}),
+    ...(chosen.reasoningEffort
+      ? { [MANAGED_MODEL_HEADERS.reasoningEffort]: chosen.reasoningEffort }
       : {}),
   };
 }
@@ -60,6 +68,9 @@ export function readManagedModel(headers: Headers): ManagedModel | undefined {
     return undefined;
   }
   const history = Number(read(MANAGED_MODEL_HEADERS.historyTokens));
+  const reasoningEffort = reasoningEffortFrom(
+    read(MANAGED_MODEL_HEADERS.reasoningEffort),
+  );
   return {
     baseUrl,
     model,
@@ -67,5 +78,6 @@ export function readManagedModel(headers: Headers): ManagedModel | undefined {
     ...(Number.isInteger(history) && history > 0
       ? { historyTokens: history }
       : {}),
+    ...(reasoningEffort ? { reasoningEffort } : {}),
   };
 }

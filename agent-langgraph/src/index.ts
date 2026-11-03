@@ -28,7 +28,7 @@ import {
   type ManagedModel,
   readManagedModel,
 } from "../../shared/managed-model";
-import { modelFetch } from "../../shared/model-fetch";
+import { modelFetch, modelFetchWith } from "../../shared/model-fetch";
 import {
   apiKeyOrPlaceholder,
   baseUrlVariableFor,
@@ -221,7 +221,10 @@ function buildModel(chosen?: ManagedModel) {
       model: chosen.model,
       apiKey: apiKeyOrPlaceholder(chosen.apiKey ?? undefined),
       streaming: true,
-      configuration: { baseURL: chosen.baseUrl, fetch: modelFetch },
+      configuration: {
+        baseURL: chosen.baseUrl,
+        fetch: modelFetchWith({ reasoningEffort: chosen.reasoningEffort }),
+      },
       ...(requiresResponsesApi(chosen.model) ? { useResponsesApi: true } : {}),
     });
   }
