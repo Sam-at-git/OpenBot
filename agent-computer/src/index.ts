@@ -1604,7 +1604,8 @@ serve<StreamData>({
        * the one asking. No Bot tool calls these. The gateway decides and records them first, as writes.
        */
       if (
-        (url.pathname === "/files/delete" || url.pathname === "/files/folder") &&
+        (url.pathname === "/files/delete" ||
+          url.pathname === "/files/folder") &&
         request.method === "POST"
       ) {
         const body = (await request.json().catch(() => null)) as {

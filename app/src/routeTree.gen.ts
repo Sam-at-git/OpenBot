@@ -78,6 +78,7 @@ import { Route as AuthedAppBotsAgentIdIndexRouteImport } from './routes/_authed/
 import { Route as AuthedAppBotsAgentIdAccessRouteImport } from './routes/_authed/_app/bots.$agentId.access'
 import { Route as AuthedAppBotsAgentIdActivityRouteImport } from './routes/_authed/_app/bots.$agentId.activity'
 import { Route as AuthedAppBotsAgentIdApprovalsRouteImport } from './routes/_authed/_app/bots.$agentId.approvals'
+import { Route as AuthedAppBotsAgentIdFilesRouteImport } from './routes/_authed/_app/bots.$agentId.files'
 import { Route as AuthedAppBotsAgentIdMemoryRouteImport } from './routes/_authed/_app/bots.$agentId.memory'
 import { Route as AuthedAppBotsAgentIdReachRouteImport } from './routes/_authed/_app/bots.$agentId.reach'
 import { Route as AuthedAppBotsAgentIdResponsibilitiesRouteImport } from './routes/_authed/_app/bots.$agentId.responsibilities'
@@ -453,6 +454,12 @@ const AuthedAppBotsAgentIdApprovalsRoute =
     path: '/bots/$agentId/approvals',
     getParentRoute: () => AuthedAppRoute,
   } as any)
+const AuthedAppBotsAgentIdFilesRoute =
+  AuthedAppBotsAgentIdFilesRouteImport.update({
+    id: '/bots/$agentId/files',
+    path: '/bots/$agentId/files',
+    getParentRoute: () => AuthedAppRoute,
+  } as any)
 const AuthedAppBotsAgentIdMemoryRoute =
   AuthedAppBotsAgentIdMemoryRouteImport.update({
     id: '/bots/$agentId/memory',
@@ -569,6 +576,7 @@ export interface FileRoutesByFullPath {
   '/bots/$agentId/access': typeof AuthedAppBotsAgentIdAccessRoute
   '/bots/$agentId/activity': typeof AuthedAppBotsAgentIdActivityRoute
   '/bots/$agentId/approvals': typeof AuthedAppBotsAgentIdApprovalsRoute
+  '/bots/$agentId/files': typeof AuthedAppBotsAgentIdFilesRoute
   '/bots/$agentId/memory': typeof AuthedAppBotsAgentIdMemoryRoute
   '/bots/$agentId/reach': typeof AuthedAppBotsAgentIdReachRoute
   '/bots/$agentId/responsibilities': typeof AuthedAppBotsAgentIdResponsibilitiesRoute
@@ -643,6 +651,7 @@ export interface FileRoutesByTo {
   '/bots/$agentId/access': typeof AuthedAppBotsAgentIdAccessRoute
   '/bots/$agentId/activity': typeof AuthedAppBotsAgentIdActivityRoute
   '/bots/$agentId/approvals': typeof AuthedAppBotsAgentIdApprovalsRoute
+  '/bots/$agentId/files': typeof AuthedAppBotsAgentIdFilesRoute
   '/bots/$agentId/memory': typeof AuthedAppBotsAgentIdMemoryRoute
   '/bots/$agentId/reach': typeof AuthedAppBotsAgentIdReachRoute
   '/bots/$agentId/responsibilities': typeof AuthedAppBotsAgentIdResponsibilitiesRoute
@@ -723,6 +732,7 @@ export interface FileRoutesById {
   '/_authed/_app/bots/$agentId/access': typeof AuthedAppBotsAgentIdAccessRoute
   '/_authed/_app/bots/$agentId/activity': typeof AuthedAppBotsAgentIdActivityRoute
   '/_authed/_app/bots/$agentId/approvals': typeof AuthedAppBotsAgentIdApprovalsRoute
+  '/_authed/_app/bots/$agentId/files': typeof AuthedAppBotsAgentIdFilesRoute
   '/_authed/_app/bots/$agentId/memory': typeof AuthedAppBotsAgentIdMemoryRoute
   '/_authed/_app/bots/$agentId/reach': typeof AuthedAppBotsAgentIdReachRoute
   '/_authed/_app/bots/$agentId/responsibilities': typeof AuthedAppBotsAgentIdResponsibilitiesRoute
@@ -802,6 +812,7 @@ export interface FileRouteTypes {
     | '/bots/$agentId/access'
     | '/bots/$agentId/activity'
     | '/bots/$agentId/approvals'
+    | '/bots/$agentId/files'
     | '/bots/$agentId/memory'
     | '/bots/$agentId/reach'
     | '/bots/$agentId/responsibilities'
@@ -876,6 +887,7 @@ export interface FileRouteTypes {
     | '/bots/$agentId/access'
     | '/bots/$agentId/activity'
     | '/bots/$agentId/approvals'
+    | '/bots/$agentId/files'
     | '/bots/$agentId/memory'
     | '/bots/$agentId/reach'
     | '/bots/$agentId/responsibilities'
@@ -955,6 +967,7 @@ export interface FileRouteTypes {
     | '/_authed/_app/bots/$agentId/access'
     | '/_authed/_app/bots/$agentId/activity'
     | '/_authed/_app/bots/$agentId/approvals'
+    | '/_authed/_app/bots/$agentId/files'
     | '/_authed/_app/bots/$agentId/memory'
     | '/_authed/_app/bots/$agentId/reach'
     | '/_authed/_app/bots/$agentId/responsibilities'
@@ -1457,6 +1470,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedAppBotsAgentIdApprovalsRouteImport
       parentRoute: typeof AuthedAppRoute
     }
+    '/_authed/_app/bots/$agentId/files': {
+      id: '/_authed/_app/bots/$agentId/files'
+      path: '/bots/$agentId/files'
+      fullPath: '/bots/$agentId/files'
+      preLoaderRoute: typeof AuthedAppBotsAgentIdFilesRouteImport
+      parentRoute: typeof AuthedAppRoute
+    }
     '/_authed/_app/bots/$agentId/memory': {
       id: '/_authed/_app/bots/$agentId/memory'
       path: '/bots/$agentId/memory'
@@ -1651,6 +1671,7 @@ interface AuthedAppRouteChildren {
   AuthedAppBotsAgentIdAccessRoute: typeof AuthedAppBotsAgentIdAccessRoute
   AuthedAppBotsAgentIdActivityRoute: typeof AuthedAppBotsAgentIdActivityRoute
   AuthedAppBotsAgentIdApprovalsRoute: typeof AuthedAppBotsAgentIdApprovalsRoute
+  AuthedAppBotsAgentIdFilesRoute: typeof AuthedAppBotsAgentIdFilesRoute
   AuthedAppBotsAgentIdMemoryRoute: typeof AuthedAppBotsAgentIdMemoryRoute
   AuthedAppBotsAgentIdReachRoute: typeof AuthedAppBotsAgentIdReachRoute
   AuthedAppBotsAgentIdResponsibilitiesRoute: typeof AuthedAppBotsAgentIdResponsibilitiesRoute
@@ -1684,6 +1705,7 @@ const AuthedAppRouteChildren: AuthedAppRouteChildren = {
   AuthedAppBotsAgentIdAccessRoute: AuthedAppBotsAgentIdAccessRoute,
   AuthedAppBotsAgentIdActivityRoute: AuthedAppBotsAgentIdActivityRoute,
   AuthedAppBotsAgentIdApprovalsRoute: AuthedAppBotsAgentIdApprovalsRoute,
+  AuthedAppBotsAgentIdFilesRoute: AuthedAppBotsAgentIdFilesRoute,
   AuthedAppBotsAgentIdMemoryRoute: AuthedAppBotsAgentIdMemoryRoute,
   AuthedAppBotsAgentIdReachRoute: AuthedAppBotsAgentIdReachRoute,
   AuthedAppBotsAgentIdResponsibilitiesRoute:

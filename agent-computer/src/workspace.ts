@@ -421,8 +421,7 @@ export function createWorkspace(
       // The folder holding the name gets the same refusals as any read: absolute, `..`, outside
       // after links. An absolute path never has "." as its folder, so it is refused there.
       const folder = dirname(normal);
-      const holder =
-        folder === "." ? root : await resolvePath(folder, false);
+      const holder = folder === "." ? root : await resolvePath(folder, false);
       if (!(await stat(holder)).isDirectory()) {
         throw new WorkspaceFileNotFoundError(`There is nothing at ${wanted}.`);
       }

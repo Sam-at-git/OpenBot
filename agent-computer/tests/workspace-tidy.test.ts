@@ -129,7 +129,12 @@ describe("deleting", () => {
   test("nothing outside the workspace can be deleted through it", async () => {
     const workspace = createWorkspace(root);
     await symlink(outside, join(root, "door"));
-    for (const path of ["../outside/secret.txt", "/etc/hosts", "door/secret.txt", ".."]) {
+    for (const path of [
+      "../outside/secret.txt",
+      "/etc/hosts",
+      "door/secret.txt",
+      "..",
+    ]) {
       await expect(workspace.remove(path)).rejects.toBeInstanceOf(
         WorkspacePathError,
       );

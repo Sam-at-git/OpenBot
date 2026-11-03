@@ -176,6 +176,7 @@ function BotFiles({ botId }: { botId: string }) {
   const entries = listing.data ? sorted(listing.data.entries) : [];
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: a drop target for a mouse drag only; the Upload button does the same from the keyboard.
     <div
       className={dragging ? "rounded-lg ring-2 ring-primary/40" : undefined}
       onDragLeave={() => setDragging(false)}
@@ -302,7 +303,9 @@ function BotFiles({ botId }: { botId: string }) {
                     )}
                   </ItemTitle>
                   <ItemDescription>
-                    {entry.kind === "folder" ? "Folder" : sizeLabel(entry.bytes)}
+                    {entry.kind === "folder"
+                      ? "Folder"
+                      : sizeLabel(entry.bytes)}
                   </ItemDescription>
                 </ItemContent>
                 <ItemActions>
