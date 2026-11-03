@@ -42,10 +42,35 @@ export type CompactionDeps = {
   defaultBudget: number;
   /** One call to the Bot's own model, answered with text. */
   complete: (agentId: string, prompt: string) => Promise<string>;
+  /**
+   * About how many tokens each attached file costs the model, by attachment id. A stored message
+   * names its files and nothing more; their text is put in only when the model is called, so without
+   * this a message carrying eight manuals counts as a few hundred tokens.
+   */
+  attachmentTokens?: (ids: readonly string[]) => Promise<Map<string, number>>;
 };
 
 export function messageTokens(message: Message): number {
   return estimateTokens(JSON.stringify(message));
+}
+
+/** The attached files a message names, by attachment id. */
+export function attachmentIdsOf(message: Message): string[] {
+  const content = (message as { content?: unknown }).content;
+  if (!Array.isArray(content)) return [];
+  const ids: string[] = [];
+  for (const part of content as Record<string, unknown>[]) {
+    const metadata = part?.metadata as { attachmentId?: unknown } | undefined;
+    const source = part?.source as { value?: unknown } | undefined;
+    const id =
+      typeof metadata?.attachmentId === "string"
+        ? metadata.attachmentId
+        : typeof source?.value === "string"
+          ? /\/api\/attachments\/([^/?#]+)/.exec(source.value)?.[1]
+          : undefined;
+    if (id) ids.push(id);
+  }
+  return ids;
 }
 
 /** The summary as the model reads it, in place of the messages it covers. */
@@ -85,18 +110,29 @@ export function planCompaction(
   messages: readonly Message[],
   stored: StoredSummary | null,
   budget: number,
-  reservedTokens = 0,
+  options: {
+    /** What each message's attached files add, by position. */
+    extraTokens?: readonly number[];
+    /**
+     * How many tokens the model itself said it read on the last call. Larger than the estimate when
+     * the estimate missed something, and then it is the one believed.
+     */
+    measuredTokens?: number;
+  } = {},
 ): { from: number; cut: number; tokens: number } | null {
   if (budget <= 0) return null;
   const covered = stored
     ? messages.findIndex((message) => message.id === stored.throughMessageId)
     : -1;
   const from = covered + 1;
-  const sizes = messages.map(messageTokens);
-  const tokens =
-    reservedTokens +
+  const sizes = messages.map(
+    (message, index) =>
+      messageTokens(message) + (options.extraTokens?.[index] ?? 0),
+  );
+  const estimated =
     (covered >= 0 && stored ? estimateTokens(stored.summary) : 0) +
     sizes.slice(from).reduce((sum, size) => sum + size, 0);
+  const tokens = Math.max(estimated, options.measuredTokens ?? 0);
   if (tokens < COMPACT_AT * budget) return null;
 
   // Walk back from the end until the recent part holds KEEP_RECENT of the budget.

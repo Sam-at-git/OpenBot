@@ -55,6 +55,7 @@ import {
 import type { Observable } from "rxjs";
 import { ReplaySubject } from "rxjs";
 import {
+  attachmentIdsOf,
   type CompactionDeps,
   compactedView,
   planCompaction,
@@ -478,6 +479,37 @@ export class LocalAgentRunner extends AgentRunner {
       : null;
   }
 
+  /**
+   * How many tokens the model said it read on the thread's last call: the `openbot.usage` event the
+   * server and agent-langgraph put in every run. The truest count there is, attached files included.
+   */
+  private lastMeasuredInputTokens(threadId: string): number | undefined {
+    const row = this.db
+      .query<{ events: string }, [string]>(
+        "SELECT events FROM agent_runs WHERE thread_id = ? AND complete = 1 ORDER BY id DESC LIMIT 1",
+      )
+      .get(threadId);
+    if (!row) return undefined;
+    let measured: number | undefined;
+    for (const event of JSON.parse(row.events) as BaseEvent[]) {
+      const custom = event as { type: string; name?: string; value?: unknown };
+      const value = custom.value as
+        | { inputTokens?: unknown; calls?: unknown }
+        | undefined;
+      if (
+        custom.type === EventType.CUSTOM &&
+        custom.name === "openbot.usage" &&
+        typeof value?.inputTokens === "number"
+      ) {
+        // A message's total adds up every call it took; one call's read is that over the count.
+        const calls =
+          typeof value.calls === "number" && value.calls > 1 ? value.calls : 1;
+        measured = Math.max(measured ?? 0, value.inputTokens / calls);
+      }
+    }
+    return measured;
+  }
+
   private saveSummary(threadId: string, summary: StoredSummary): void {
     this.db.run(
       "INSERT OR REPLACE INTO thread_summaries (thread_id, through_message_id, summary, created_at) VALUES (?, ?, ?, ?)",
@@ -513,7 +545,18 @@ export class LocalAgentRunner extends AgentRunner {
       deps.defaultBudget;
     const messages = this.latestSnapshot(threadId);
     const stored = this.summaryOf(threadId);
-    const plan = planCompaction(messages, stored, budget);
+    const ids = messages.map(attachmentIdsOf);
+    const costs = deps.attachmentTokens
+      ? await deps
+          .attachmentTokens(ids.flat())
+          .catch(() => new Map<string, number>())
+      : new Map<string, number>();
+    const plan = planCompaction(messages, stored, budget, {
+      extraTokens: ids.map((list) =>
+        list.reduce((sum, id) => sum + (costs.get(id) ?? 0), 0),
+      ),
+      measuredTokens: this.lastMeasuredInputTokens(threadId),
+    });
     if (!plan) return;
     const summary = await summarise({
       messages,

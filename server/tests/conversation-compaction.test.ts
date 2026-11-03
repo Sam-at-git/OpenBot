@@ -8,6 +8,7 @@ import {
 } from "@ag-ui/client";
 import { Observable } from "rxjs";
 import {
+  attachmentIdsOf,
   COMPACT_AT,
   compactedView,
   planCompaction,
@@ -117,6 +118,42 @@ describe("deciding when and where to compact", () => {
     expect(messages[plan?.cut ?? 0]?.role).toBe("user");
     expect(plan?.from).toBe(0);
     expect(plan?.cut).toBeGreaterThan(0);
+  });
+
+  test("attached files and the model's own count are believed over a small estimate", () => {
+    const messages = conversation([100, 100, 100, 100]);
+    expect(planCompaction(messages, null, 10_000)).toBeNull();
+    // Eight manuals in the first message: its text is put in only when the model is called.
+    expect(
+      planCompaction(messages, null, 10_000, {
+        extraTokens: [9_000, 0, 0, 0],
+      }),
+    ).not.toBeNull();
+    // Or the model said it read more than the messages look like.
+    expect(
+      planCompaction(messages, null, 10_000, { measuredTokens: 9_000 }),
+    ).not.toBeNull();
+  });
+
+  test("a message's attached files are found by id", () => {
+    expect(
+      attachmentIdsOf({
+        id: "u1",
+        role: "user",
+        content: [
+          { type: "text", text: "put these in ims-manual" },
+          {
+            type: "document",
+            source: { type: "url", value: "/api/attachments/abc" },
+            metadata: { attachmentId: "abc", filename: "01.md" },
+          },
+          {
+            type: "document",
+            source: { type: "url", value: "/api/attachments/def" },
+          },
+        ],
+      } as unknown as Message),
+    ).toEqual(["abc", "def"]);
   });
 
   test("a compacted conversation counts its summary and only what came after it", () => {

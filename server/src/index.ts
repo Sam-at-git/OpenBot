@@ -157,6 +157,7 @@ import {
 import { createDatabase } from "./db/client";
 import {
   agents,
+  attachments,
   brokeredConnections,
   channelAgents,
   channelMemberships,
@@ -1500,6 +1501,32 @@ if (config.runtime.mode === "local")
         json: false,
         target: llmService.compactionTarget(agentId),
       })(prompt),
+    // What an attached file costs the model when it is put in: text at about its length, an image or a
+    // document the Bot's computer opens at a flat amount.
+    attachmentTokens: async (ids) => {
+      const wanted = [...new Set(ids)].filter((id) =>
+        /^[0-9a-f-]{36}$/i.test(id),
+      );
+      if (wanted.length === 0) return new Map();
+      const rows = await database
+        .select({
+          id: attachments.id,
+          mimeType: attachments.mimeType,
+          sizeBytes: attachments.sizeBytes,
+        })
+        .from(attachments)
+        .where(inArray(attachments.id, wanted));
+      return new Map(
+        rows.map((row) => [
+          row.id,
+          /^(text\/|application\/(json|xml|csv|x-ndjson))/.test(row.mimeType)
+            ? Math.ceil(row.sizeBytes * 0.4)
+            : row.mimeType.startsWith("image/")
+              ? 1_500
+              : 200,
+        ]),
+      );
+    },
   });
 
 const hostAccessBroker = createHostAccessBroker(Date.now, {
