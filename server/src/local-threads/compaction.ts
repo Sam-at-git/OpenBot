@@ -161,7 +161,9 @@ export function planCompaction(
     role(index) === "user" || role(index) === "assistant";
   // Folded only when it is big on its own; an ordinary message there is where the kept part starts.
   const start =
-    (sizes[keepFrom] ?? 0) > (KEEP_RECENT * budget) / 2 ? keepFrom + 1 : keepFrom;
+    (sizes[keepFrom] ?? 0) > (KEEP_RECENT * budget) / 2
+      ? keepFrom + 1
+      : keepFrom;
   let cut = firstAfter(start, isPerson);
   if (cut < 0) cut = firstAfter(start, isStep);
   if (cut < 0 && isStep(keepFrom)) cut = keepFrom;
