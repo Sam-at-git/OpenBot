@@ -384,3 +384,145 @@ describe("local conversations: the client headless turns use", () => {
     ).resolves.toMatchObject({ runId: "r2" });
   });
 });
+
+/**
+ * A Bot that starts a reply and never finishes it, the way a run looks to a process that is about to
+ * be restarted: what it had said is the only trace left of it.
+ */
+class HangingAgent extends AbstractAgent {
+  constructor(private readonly said: string) {
+    super({ agentId: "general" });
+  }
+
+  run(input: RunAgentInput): Observable<BaseEvent> {
+    return new Observable<BaseEvent>((subscriber) => {
+      subscriber.next({
+        type: EventType.RUN_STARTED,
+        threadId: input.threadId,
+        runId: input.runId,
+      } as BaseEvent);
+      subscriber.next({
+        type: EventType.TEXT_MESSAGE_START,
+        messageId: "reply-1",
+        role: "assistant",
+      } as BaseEvent);
+      subscriber.next({
+        type: EventType.TEXT_MESSAGE_CONTENT,
+        messageId: "reply-1",
+        delta: this.said,
+      } as BaseEvent);
+      // Never ends.
+    });
+  }
+}
+
+function startHanging(
+  runner: LocalAgentRunner,
+  threadId: string,
+  messages: Message[],
+  said: string,
+) {
+  const agent = new HangingAgent(said);
+  agent.threadId = threadId;
+  agent.setMessages(messages);
+  runner
+    .run({
+      threadId,
+      agent,
+      input: inputFor(threadId, messages),
+      ownerId: "alice",
+    })
+    .subscribe({});
+}
+
+describe("local conversations: nothing a person sent is lost", () => {
+  test("the message is kept from the moment the run starts", () => {
+    const runner = new LocalAgentRunner({ dbPath: ":memory:" });
+    const question = user("Put the manuals into ims-manual.");
+    startHanging(runner, "t1", [question], "Working on it");
+
+    const messages = runner.getThreadMessages("t1", { ownerId: "alice" });
+    expect(messages.map((message) => message.id)).toContain(question.id);
+  });
+
+  test("a restart mid-reply keeps the message and what was said, and closes the run", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "openbot-threads-"));
+    const dbPath = join(directory, "threads.sqlite");
+    try {
+      const first = new LocalAgentRunner({ dbPath });
+      await runTurn(first, {
+        threadId: "t1",
+        ownerId: "alice",
+        messages: [user("Remember the number seven.", "u1")],
+        reply: "Noted.",
+      });
+      const question = user("Now check the roster.", "u2");
+      startHanging(
+        first,
+        "t1",
+        [...first.getThreadMessages("t1", { ownerId: "alice" }), question],
+        "Opening the roster",
+      );
+      // Past one checkpoint, then the process is gone without finishing anything.
+      await Bun.sleep(1_300);
+      first.close();
+
+      const second = new LocalAgentRunner({ dbPath });
+      const messages = second.getThreadMessages("t1", { ownerId: "alice" });
+      expect(messages.map((message) => message.id)).toEqual([
+        "u1",
+        expect.any(String),
+        "u2",
+        "reply-1",
+      ]);
+      expect(textOf(messages.at(-1))).toBe("Opening the roster");
+      expect(await second.isRunning({ threadId: "t1", ownerId: "alice" })).toBe(
+        false,
+      );
+
+      // A reconnecting browser sees the run end, and why.
+      const replayed: BaseEvent[] = [];
+      await new Promise<void>((resolve) =>
+        second
+          .connect({ threadId: "t1", ownerId: "alice" })
+          .subscribe({ next: (e) => replayed.push(e), complete: resolve }),
+      );
+      expect(JSON.stringify(replayed)).toContain("OpenBot restarted");
+
+      // And the conversation carries on.
+      await runTurn(second, {
+        threadId: "t1",
+        ownerId: "alice",
+        messages: [...messages, user("Continue.", "u3")],
+        reply: "Continuing.",
+      });
+      expect(
+        second
+          .getThreadMessages("t1", { ownerId: "alice" })
+          .map((message) => message.id)
+          .slice(0, 5),
+      ).toEqual(["u1", expect.any(String), "u2", "reply-1", "u3"]);
+      second.close();
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("a browser reconnecting mid-run sees each event once", async () => {
+    const runner = new LocalAgentRunner({ dbPath: ":memory:" });
+    startHanging(runner, "t1", [user("Hello.", "u1")], "Hi");
+    await Bun.sleep(1_200);
+    const replayed: BaseEvent[] = [];
+    const subscription = runner
+      .connect({ threadId: "t1", ownerId: "alice" })
+      .subscribe({ next: (e) => replayed.push(e) });
+    await Bun.sleep(20);
+    subscription.unsubscribe();
+    expect(
+      replayed.filter((e) => e.type === EventType.RUN_STARTED),
+    ).toHaveLength(1);
+    expect(
+      replayed.filter((e) => e.type === EventType.TEXT_MESSAGE_CONTENT),
+    ).toHaveLength(1);
+  });
+});

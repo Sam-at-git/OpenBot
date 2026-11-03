@@ -258,6 +258,21 @@ export function createLlmService(options: {
       };
     },
 
+    /**
+     * For compacting one Bot's long conversation (local-threads/compaction.ts): that Bot's own model, so a summary of
+     * the conversation goes nowhere the conversation itself does not. Usage is recorded as `compaction`.
+     */
+    compactionTarget(agentId: string) {
+      return async () => {
+        const target = await botTarget(agentId).catch(() => undefined);
+        if (!target) return undefined;
+        return {
+          ...target,
+          onUsage: recordFor(target, { purpose: "compaction", agentId }),
+        };
+      };
+    },
+
     async overview(): Promise<LlmOverview> {
       return {
         providers: await store.listProviders(),

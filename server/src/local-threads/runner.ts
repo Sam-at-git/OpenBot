@@ -54,9 +54,24 @@ import {
 } from "@copilotkit/runtime/v2";
 import type { Observable } from "rxjs";
 import { ReplaySubject } from "rxjs";
+import {
+  type CompactionDeps,
+  compactedView,
+  planCompaction,
+  SUMMARY_MESSAGE_ID,
+  type StoredSummary,
+  summarise,
+} from "./compaction";
 
-/** Bumped when the tables below change shape. */
-const SCHEMA_VERSION = 1;
+/** Bumped when the tables below change shape. 2: `agent_runs.complete`, for runs written as they go. */
+const SCHEMA_VERSION = 2;
+
+/** How often a run in progress is written down, so a restart loses at most this much of it. */
+const CHECKPOINT_MS = 1_000;
+
+/** What a run cut short by a restart says, in the conversation where it stopped. */
+export const INTERRUPTED_BY_RESTART =
+  "OpenBot restarted while this was running. Everything up to here is kept. Send a message to continue.";
 
 type StoredRun = {
   runId: string;
@@ -96,6 +111,17 @@ export class LocalAgentRunner extends AgentRunner {
   /** Conversation locks, by thread. In memory: a lock never outlives the process that took it. */
   private readonly locks = new Map<string, HeldLock>();
 
+  /** How long conversations are compacted for their model. Absent: never (compaction.ts). */
+  private compaction: CompactionDeps | undefined;
+
+  /** Threads being compacted now, so one conversation is never summarised twice at once. */
+  private readonly compacting = new Map<string, Promise<void>>();
+
+  /** Turn compacting on. Set once at start-up, when the models are known. */
+  useCompaction(deps: CompactionDeps): void {
+    this.compaction = deps;
+  }
+
   constructor(options: { dbPath: string }) {
     super();
     if (options.dbPath !== ":memory:")
@@ -108,10 +134,46 @@ export class LocalAgentRunner extends AgentRunner {
     this.db.run("PRAGMA busy_timeout = 5000");
     this.initializeSchema();
     // A run cannot outlive the process that ran it. See ONE PROCESS PER FILE above.
+    this.closeInterruptedRuns();
     this.db.run(
       "UPDATE run_state SET is_running = 0, current_run_id = NULL, updated_at = ?",
       [Date.now()],
     );
+  }
+
+  /**
+   * Runs the last process was still in the middle of, closed as interrupted.
+   *
+   * A run is written when it starts and again as it goes (see `run`), so what the person sent and
+   * whatever the Bot had already said are on disk. What a restart leaves is a run with no end:
+   * this gives it one, saying why, so the conversation reads as stopped rather than as still going.
+   */
+  private closeInterruptedRuns(): void {
+    const open = this.db
+      .query<{ run_id: string; thread_id: string; events: string; input: string }, []>(
+        "SELECT run_id, thread_id, events, input FROM agent_runs WHERE complete = 0",
+      )
+      .all();
+    for (const row of open) {
+      const events = JSON.parse(row.events) as BaseEvent[];
+      const input = JSON.parse(row.input) as RunAgentInput;
+      if (!events.some((event) => event.type === EventType.RUN_STARTED))
+        events.unshift({
+          type: EventType.RUN_STARTED,
+          threadId: row.thread_id,
+          runId: row.run_id,
+          input,
+        } as RunStartedEvent);
+      finalizeRunEvents(events, {
+        stopRequested: false,
+        protocolVersion: input.protocolVersion,
+        interruptionMessage: INTERRUPTED_BY_RESTART,
+      });
+      this.db.run(
+        "UPDATE agent_runs SET events = ?, complete = 1 WHERE run_id = ?",
+        [JSON.stringify(compactEvents(events)), row.run_id],
+      );
+    }
   }
 
   private initializeSchema(): void {
@@ -144,6 +206,25 @@ export class LocalAgentRunner extends AgentRunner {
     this.db.run(
       "CREATE INDEX IF NOT EXISTS agent_runs_thread ON agent_runs(thread_id, id)",
     );
+    // A run is written when it starts and finished in place, so a row can be a run still going.
+    // Rows from before version 2 were all written finished.
+    const columns = this.db
+      .query<{ name: string }, []>("PRAGMA table_info(agent_runs)")
+      .all()
+      .map((column) => column.name);
+    if (!columns.includes("complete"))
+      this.db.run(
+        "ALTER TABLE agent_runs ADD COLUMN complete INTEGER NOT NULL DEFAULT 1",
+      );
+    // The summary each compacted conversation's model is sent in place of its earlier part (compaction.ts).
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS thread_summaries (
+        thread_id TEXT PRIMARY KEY,
+        through_message_id TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      )
+    `);
     this.db.run(`
       CREATE TABLE IF NOT EXISTS run_state (
         thread_id TEXT PRIMARY KEY,
@@ -286,27 +367,34 @@ export class LocalAgentRunner extends AgentRunner {
   // ---------------------------------------------------------------------------------------------
   // Storage
 
-  private storeRun(input: {
+  /**
+   * A run's row, written before the agent is asked anything.
+   *
+   * WRITTEN AT THE START, NOT THE END. A run used to be stored once, when it finished, so a process
+   * that died part way through (a deploy, a crash, the machine losing power) took the run with it,
+   * and with it the message the person had just sent: after a reload it was simply gone. Written
+   * first, finished in place by `saveRun`, the worst a restart can do is cut a reply short.
+   */
+  private beginRun(input: {
     threadId: string;
     runId: string;
     parentRunId: string | null;
     agentId: string;
-    events: BaseEvent[];
     runInput: RunAgentInput;
-    messages: Message[] | null;
+    messages: Message[];
   }): void {
     const now = Date.now();
     this.db.transaction(() => {
       this.db.run(
-        "INSERT INTO agent_runs (thread_id, run_id, parent_run_id, agent_id, events, input, messages, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO agent_runs (thread_id, run_id, parent_run_id, agent_id, events, input, messages, created_at, complete) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)",
         [
           input.threadId,
           input.runId,
           input.parentRunId,
           input.agentId,
-          JSON.stringify(compactEvents(input.events)),
+          "[]",
           JSON.stringify(input.runInput),
-          input.messages ? JSON.stringify(input.messages) : null,
+          JSON.stringify(input.messages),
           now,
         ],
       );
@@ -317,7 +405,42 @@ export class LocalAgentRunner extends AgentRunner {
     })();
   }
 
-  private storedRuns(threadId: string): StoredRun[] {
+  /** What a run has done so far, or all of it once `complete`. */
+  private saveRun(input: {
+    threadId: string;
+    runId: string;
+    events: BaseEvent[];
+    messages: Message[] | null;
+    complete: boolean;
+  }): void {
+    const now = Date.now();
+    this.db.transaction(() => {
+      this.db.run(
+        "UPDATE agent_runs SET events = ?, messages = ?, complete = ? WHERE run_id = ?",
+        [
+          JSON.stringify(compactEvents(input.events)),
+          input.messages ? JSON.stringify(input.messages) : null,
+          input.complete ? 1 : 0,
+          input.runId,
+        ],
+      );
+      this.db.run("UPDATE threads SET updated_at = ? WHERE thread_id = ?", [
+        now,
+        input.threadId,
+      ]);
+    })();
+  }
+
+  /** A run that produced nothing and kept nothing the person sent, removed rather than kept empty. */
+  private discardRun(runId: string): void {
+    this.db.run("DELETE FROM agent_runs WHERE run_id = ?", [runId]);
+  }
+
+  private storedRuns(
+    threadId: string,
+    /** A run this process is still streaming, which its live connection replays instead. */
+    except?: string | null,
+  ): StoredRun[] {
     return this.db
       .query<
         {
@@ -331,12 +454,94 @@ export class LocalAgentRunner extends AgentRunner {
         "SELECT run_id, agent_id, events, created_at FROM agent_runs WHERE thread_id = ? ORDER BY id ASC",
       )
       .all(threadId)
+      .filter((row) => !except || row.run_id !== except)
       .map((row) => ({
         runId: row.run_id,
         agentId: row.agent_id,
         events: JSON.parse(row.events) as BaseEvent[],
         createdAt: row.created_at,
       }));
+  }
+
+  /** The summary a compacted conversation's model is sent, if it has one. */
+  summaryOf(threadId: string): StoredSummary | null {
+    const row = this.db
+      .query<{ through_message_id: string; summary: string }, [string]>(
+        "SELECT through_message_id, summary FROM thread_summaries WHERE thread_id = ?",
+      )
+      .get(threadId);
+    return row
+      ? { throughMessageId: row.through_message_id, summary: row.summary }
+      : null;
+  }
+
+  private saveSummary(threadId: string, summary: StoredSummary): void {
+    this.db.run(
+      "INSERT OR REPLACE INTO thread_summaries (thread_id, through_message_id, summary, created_at) VALUES (?, ?, ?, ?)",
+      [threadId, summary.throughMessageId, summary.summary, Date.now()],
+    );
+  }
+
+  /** Compact the thread in the background if it has grown past COMPACT_AT; one at a time per thread. */
+  private compactLater(threadId: string, agentId: string): void {
+    if (!this.compaction || this.compacting.has(threadId)) return;
+    const work = this.compactNow(threadId, agentId)
+      .catch((error) =>
+        // A failed summary leaves the conversation as it was: the next run is sent it whole, trimmed
+        // as before, and the next finished run tries again.
+        console.error(
+          JSON.stringify({
+            type: "conversation-compaction-failed",
+            threadId,
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        ),
+      )
+      .finally(() => this.compacting.delete(threadId));
+    this.compacting.set(threadId, work);
+  }
+
+  /** Summarise what is due, if anything is. Exposed for tests, which await it. */
+  async compactNow(threadId: string, agentId: string): Promise<void> {
+    const deps = this.compaction;
+    if (!deps) return;
+    const budget =
+      (await deps.budgetFor(agentId).catch(() => undefined)) ??
+      deps.defaultBudget;
+    const messages = this.latestSnapshot(threadId);
+    const stored = this.summaryOf(threadId);
+    const plan = planCompaction(messages, stored, budget);
+    if (!plan) return;
+    const summary = await summarise({
+      messages,
+      from: plan.from,
+      cut: plan.cut,
+      stored: plan.from > 0 ? stored : null,
+      budget,
+      complete: (prompt) => deps.complete(agentId, prompt),
+    });
+    const through = messages[plan.cut - 1];
+    if (!through) return;
+    this.saveSummary(threadId, { throughMessageId: through.id, summary });
+    console.info(
+      JSON.stringify({
+        type: "conversation-compacted",
+        threadId,
+        agentId,
+        budget,
+        tokensBefore: plan.tokens,
+        messagesFolded: plan.cut - plan.from,
+        messagesKept: messages.length - plan.cut,
+      }),
+    );
+  }
+
+  /** The run this process is streaming in the thread now, if any. */
+  private liveRunId(threadId: string): string | null {
+    const state = this.getRunState(threadId);
+    return state.isRunning && this.activeConnections.has(threadId)
+      ? state.currentRunId
+      : null;
   }
 
   private latestRunId(threadId: string): string | null {
@@ -427,6 +632,20 @@ export class LocalAgentRunner extends AgentRunner {
       []
     ).filter((message) => !historicMessageIds.has(message.id));
 
+    /*
+     * A compacted conversation's model is sent its summary and the messages after it, not the whole
+     * conversation (compaction.ts). Only the agent's copy changes: what is stored is put back together
+     * below from the thread's own messages, so the summary never becomes part of the conversation.
+     */
+    const agentMessagesAtStart: Message[] = Array.isArray(request.agent.messages)
+      ? [...request.agent.messages]
+      : [];
+    const view = this.compaction
+      ? compactedView(agentMessagesAtStart, this.summaryOf(threadId))
+      : null;
+    if (view) request.agent.setMessages(view);
+    const sentIds = new Set((view ?? agentMessagesAtStart).map((m) => m.id));
+
     const currentRunEvents: BaseEvent[] = [];
     const nextSubject = new ReplaySubject<BaseEvent>(Infinity);
     const runSubject = new ReplaySubject<BaseEvent>(Infinity);
@@ -463,15 +682,21 @@ export class LocalAgentRunner extends AgentRunner {
 
     /** The thread's messages after this run, for `getThreadMessages`. */
     const snapshotAfterRun = (): Message[] => {
-      const agentMessages = Array.isArray(request.agent.messages)
-        ? [...request.agent.messages]
-        : [];
-      if (request.persistedInputMessages === undefined) return agentMessages;
+      const agentMessages = (
+        Array.isArray(request.agent.messages) ? [...request.agent.messages] : []
+      ).filter((message) => message.id !== SUMMARY_MESSAGE_ID);
+      if (request.persistedInputMessages === undefined)
+        // Compacted, the agent held only the recent part: the whole conversation is what it was
+        // given before that, with whatever the run changed or added laid over it.
+        return view
+          ? mergeById(agentMessagesAtStart, agentMessages)
+          : agentMessages;
       // The caller narrowed what is kept: the history, what it chose to keep of the input, and
       // whatever the run itself produced.
-      const inputIds = new Set(
-        (request.input.messages ?? []).map((message) => message.id),
-      );
+      const inputIds = new Set([
+        ...(request.input.messages ?? []).map((message) => message.id),
+        ...sentIds,
+      ]);
       const kept = [...previousSnapshot];
       const keptIds = new Set(kept.map((message) => message.id));
       for (const message of [
@@ -483,6 +708,47 @@ export class LocalAgentRunner extends AgentRunner {
         kept.push(message);
       }
       return kept;
+    };
+
+    /*
+     * Written down before the agent is asked anything: the person's message, in the conversation's
+     * messages, so a reload shows it even if this process dies before the reply.
+     */
+    const startedWith = mergeById(previousSnapshot, recordedInputMessages);
+    this.beginRun({
+      threadId,
+      runId,
+      parentRunId,
+      agentId: request.agent.agentId ?? "default",
+      runInput: { ...request.input, messages: recordedInputMessages },
+      messages: startedWith,
+    });
+
+    /*
+     * And again as it goes, at most every CHECKPOINT_MS: a reply cut short by a restart keeps what
+     * it had already said. The messages so far are what the agent holds, laid over what the run
+     * started with, so what the person sent is there whether or not the agent has taken it in yet.
+     */
+    let finished = false;
+    let checkpoint: ReturnType<typeof setTimeout> | undefined;
+    const scheduleCheckpoint = () => {
+      if (checkpoint || finished) return;
+      checkpoint = setTimeout(() => {
+        checkpoint = undefined;
+        if (finished) return;
+        try {
+          this.saveRun({
+            threadId,
+            runId,
+            events: [...currentRunEvents],
+            messages: mergeById(startedWith, snapshotAfterRun()),
+            complete: false,
+          });
+        } catch (error) {
+          // A missed checkpoint costs at most the next second of a reply; the run carries on.
+          console.error("[local-threads] a checkpoint failed", { threadId, runId }, error);
+        }
+      }, CHECKPOINT_MS);
     };
 
     const finish = (failure?: unknown) => {
@@ -505,17 +771,21 @@ export class LocalAgentRunner extends AgentRunner {
           : {}),
       }))
         emit(event);
-      if (currentRunEvents.length > 0)
-        this.storeRun({
+      finished = true;
+      if (checkpoint) clearTimeout(checkpoint);
+      if (currentRunEvents.length > 0 || recordedInputMessages.length > 0)
+        this.saveRun({
           threadId,
           runId,
-          parentRunId,
-          agentId: request.agent.agentId ?? "default",
           events: currentRunEvents,
-          runInput: { ...request.input, messages: recordedInputMessages },
           messages: snapshotAfterRun(),
+          complete: true,
         });
+      else this.discardRun(runId);
       this.setRunState(threadId, false);
+      // After the run, in the background: the next one is sent the summary if this one passed COMPACT_AT.
+      if (failure === undefined && !connection.stopRequested)
+        this.compactLater(threadId, request.agent.agentId ?? "default");
       connection.agent = undefined;
       connection.runSubject = undefined;
       connection.stopRequested = false;
@@ -544,6 +814,7 @@ export class LocalAgentRunner extends AgentRunner {
             }
             currentRunEvents.push(processed);
             emit(processed);
+            scheduleCheckpoint();
           },
         });
         finish();
@@ -561,6 +832,8 @@ export class LocalAgentRunner extends AgentRunner {
     // Started now, not on subscription. A failure while storing must not leave the thread marked
     // running, where it would refuse every later run until the process restarts.
     runAgent().catch((error) => {
+      finished = true;
+      if (checkpoint) clearTimeout(checkpoint);
       console.error(
         "[local-threads] a run could not be finished",
         { threadId, runId },
@@ -588,8 +861,10 @@ export class LocalAgentRunner extends AgentRunner {
       return subject.asObservable();
     }
     const emitted = new Set<string>();
+    // The run still streaming is replayed by its live connection below, not from its checkpoint.
+    const live = this.liveRunId(request.threadId);
     for (const event of compactEvents(
-      this.storedRuns(request.threadId).flatMap((run) => run.events),
+      this.storedRuns(request.threadId, live).flatMap((run) => run.events),
     )) {
       subject.next(event);
       if ("messageId" in event && typeof event.messageId === "string")
@@ -696,7 +971,9 @@ export class LocalAgentRunner extends AgentRunner {
   ): BaseEvent[] {
     if (!this.isOwnedBy(threadId, scope?.ownerId)) return [];
     return compactEvents(
-      this.storedRuns(threadId).flatMap((run) => run.events),
+      this.storedRuns(threadId, this.liveRunId(threadId)).flatMap(
+        (run) => run.events,
+      ),
     );
   }
 
@@ -782,3 +1059,24 @@ export type LearningThreadRecord = {
   runCount: number;
   updatedAt: number;
 };
+
+/**
+ * `base` with `over` laid on it by id: a message in both takes `over`'s version in `base`'s place,
+ * one only in `over` is added at the end. For a checkpoint, where the agent's messages are the
+ * newer word on anything it holds and the run's starting messages fill in what it does not.
+ */
+export function mergeById(
+  base: readonly Message[],
+  over: readonly Message[],
+): Message[] {
+  const merged = [...base];
+  const at = new Map(merged.map((message, index) => [message.id, index]));
+  for (const message of over) {
+    const index = at.get(message.id);
+    if (index === undefined) {
+      at.set(message.id, merged.length);
+      merged.push(message);
+    } else merged[index] = message;
+  }
+  return merged;
+}

@@ -214,6 +214,7 @@ import { createLlmService } from "./llm";
 import { createLlmStore } from "./llm/store";
 import { createLocalLearning } from "./local-learning";
 import { LocalLearningStore } from "./local-learning/store";
+import { historyBudgetFrom } from "@openbot/shared/history-budget";
 import { localThreads } from "./local-threads/client";
 import { createMemoryDefaults } from "./memory/defaults";
 import { createMemoryIngestion } from "./memory/ingestion";
@@ -1480,6 +1481,28 @@ const localLearning =
       })
     : undefined;
 localLearning?.start();
+
+/*
+ * Long conversations compacted for their model, in local mode (local-threads/compaction.ts). Past 80% of the budget a
+ * Bot's model is given, for that Bot's conversation, a summary of the earlier part and the recent part word for word.
+ * The summary is written by the Bot's own model, so nothing goes anywhere the conversation does not. The stored
+ * conversation, and what a person sees, are untouched.
+ */
+if (config.runtime.mode === "local")
+  localThreads(config.runtime.local.dbPath).runner.useCompaction({
+    budgetFor: (agentId) => llmService.historyTokensFor(agentId),
+    defaultBudget: historyBudgetFrom(process.env).maxTokens,
+    complete: (agentId, prompt) =>
+      createModelCompleter({
+        model: runtimeModel,
+        resolveApiKey: resolveRuntimeModelApiKey,
+        // A local model reads a long conversation at a few hundred tokens a second.
+        timeoutMs: 20 * 60_000,
+        maxTokens: 8192,
+        json: false,
+        target: llmService.compactionTarget(agentId),
+      })(prompt),
+  });
 
 const hostAccessBroker = createHostAccessBroker(Date.now, {
   approvalGate: approvalService.gate,
