@@ -31,11 +31,27 @@ class RecordingAgent extends AbstractAgent {
     const id = `assistant-${crypto.randomUUID()}`;
     return new Observable<BaseEvent>((subscriber) => {
       for (const event of [
-        { type: EventType.RUN_STARTED, threadId: input.threadId, runId: input.runId },
-        { type: EventType.TEXT_MESSAGE_START, messageId: id, role: "assistant" },
-        { type: EventType.TEXT_MESSAGE_CONTENT, messageId: id, delta: this.reply },
+        {
+          type: EventType.RUN_STARTED,
+          threadId: input.threadId,
+          runId: input.runId,
+        },
+        {
+          type: EventType.TEXT_MESSAGE_START,
+          messageId: id,
+          role: "assistant",
+        },
+        {
+          type: EventType.TEXT_MESSAGE_CONTENT,
+          messageId: id,
+          delta: this.reply,
+        },
         { type: EventType.TEXT_MESSAGE_END, messageId: id },
-        { type: EventType.RUN_FINISHED, threadId: input.threadId, runId: input.runId },
+        {
+          type: EventType.RUN_FINISHED,
+          threadId: input.threadId,
+          runId: input.runId,
+        },
       ])
         subscriber.next(event as BaseEvent);
       subscriber.complete();
@@ -82,7 +98,11 @@ describe("deciding when and where to compact", () => {
     sizes.map((size, index) =>
       index % 2 === 0
         ? user(words(size), `u${index}`)
-        : ({ id: `a${index}`, role: "assistant", content: words(size) } as Message),
+        : ({
+            id: `a${index}`,
+            role: "assistant",
+            content: words(size),
+          } as Message),
     );
 
   test("under 80% of the budget nothing is compacted", () => {

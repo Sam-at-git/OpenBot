@@ -160,6 +160,12 @@ Two surfaces beside the conversation. The screen is the live browser, proxied ov
 
 Activity is held in the browser for the open conversation and is gone on reload. It is a window rather than a record; the record is the audit trail, which is server-side, survives restarts, and is what an investigation reads. A saved file contributes its path and size and never its contents, matching the write route, which declines to echo them because a Bot may be saving something it was told in confidence.
 
+## Long conversations, in local mode
+
+Conversations are kept in a SQLite file (`server/src/local-threads/runner.ts`). A run is written when it starts and saved as it goes, at most a second apart, so a restart or a crash keeps what the person sent and whatever the Bot had said; on start-up, a run left open is closed with a note that OpenBot restarted.
+
+A model is sent the whole conversation on every call, which a long one makes slow. Past 80% of the model's conversation budget (Admin, Models, or `HISTORY_TOKEN_BUDGET`), the earlier part is summarised in the background by the Bot's own model (`server/src/local-threads/compaction.ts`), in sections modelled on Claude Code's compaction: the request, facts, files, errors and fixes, progress, each of the person's messages, pending work, current work and the next step. From then on the model is sent the summary and the most recent 30% of the budget word for word; the summary does not change between calls, so a provider's prompt cache keeps working. At 80% again, the new part is folded into a new summary. Only what the model is sent changes: the stored conversation, and what a person sees, keep every message. Summary calls are counted as `compaction` under Admin, Usage.
+
 ## Coworkers and channels
 
 A coworker is a durable Bot profile:

@@ -5,6 +5,7 @@ import {
 } from "@copilotkit/runtime/v2";
 import { computerUploadPath } from "@openbot/shared/attachments";
 import { computerGuidance } from "@openbot/shared/bot-prompt";
+import { historyBudgetFrom } from "@openbot/shared/history-budget";
 import { reasoningEffortFrom } from "@openbot/shared/model-fetch";
 import { isPersonBrowserId } from "@openbot/shared/openbot-browser";
 import { workOwner } from "@openbot/shared/work-owner";
@@ -214,7 +215,6 @@ import { createLlmService } from "./llm";
 import { createLlmStore } from "./llm/store";
 import { createLocalLearning } from "./local-learning";
 import { LocalLearningStore } from "./local-learning/store";
-import { historyBudgetFrom } from "@openbot/shared/history-budget";
 import { localThreads } from "./local-threads/client";
 import { createMemoryDefaults } from "./memory/defaults";
 import { createMemoryIngestion } from "./memory/ingestion";
@@ -798,9 +798,7 @@ const llmService = createLlmService({
       runtimeModel.provider === "openai" &&
       !runtimeModel.plan &&
       process.env.COPILOTKIT_OPENAI_API?.trim() === "chat",
-    reasoningEffort: reasoningEffortFrom(
-      process.env.OPENBOT_REASONING_EFFORT,
-    ),
+    reasoningEffort: reasoningEffortFrom(process.env.OPENBOT_REASONING_EFFORT),
     resolveApiKey: () =>
       resolveModelApiKey({
         encryptionKey: config.keyEncryptionKey,

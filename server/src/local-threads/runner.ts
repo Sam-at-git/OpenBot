@@ -58,8 +58,8 @@ import {
   type CompactionDeps,
   compactedView,
   planCompaction,
-  SUMMARY_MESSAGE_ID,
   type StoredSummary,
+  SUMMARY_MESSAGE_ID,
   summarise,
 } from "./compaction";
 
@@ -150,7 +150,10 @@ export class LocalAgentRunner extends AgentRunner {
    */
   private closeInterruptedRuns(): void {
     const open = this.db
-      .query<{ run_id: string; thread_id: string; events: string; input: string }, []>(
+      .query<
+        { run_id: string; thread_id: string; events: string; input: string },
+        []
+      >(
         "SELECT run_id, thread_id, events, input FROM agent_runs WHERE complete = 0",
       )
       .all();
@@ -637,7 +640,9 @@ export class LocalAgentRunner extends AgentRunner {
      * conversation (compaction.ts). Only the agent's copy changes: what is stored is put back together
      * below from the thread's own messages, so the summary never becomes part of the conversation.
      */
-    const agentMessagesAtStart: Message[] = Array.isArray(request.agent.messages)
+    const agentMessagesAtStart: Message[] = Array.isArray(
+      request.agent.messages,
+    )
       ? [...request.agent.messages]
       : [];
     const view = this.compaction
@@ -746,7 +751,11 @@ export class LocalAgentRunner extends AgentRunner {
           });
         } catch (error) {
           // A missed checkpoint costs at most the next second of a reply; the run carries on.
-          console.error("[local-threads] a checkpoint failed", { threadId, runId }, error);
+          console.error(
+            "[local-threads] a checkpoint failed",
+            { threadId, runId },
+            error,
+          );
         }
       }, CHECKPOINT_MS);
     };
