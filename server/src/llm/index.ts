@@ -47,7 +47,7 @@ export type BuiltInModel = {
    */
   chatCompatible: boolean;
   resolveApiKey: () => Promise<string | null>;
-  /** The started-with model's thinking level (`BOT_REASONING_EFFORT`), if one was set. */
+  /** The started-with model's thinking level (`OPENBOT_REASONING_EFFORT`), if one was set. */
   reasoningEffort?: ReasoningEffort;
 };
 

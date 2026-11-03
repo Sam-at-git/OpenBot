@@ -797,7 +797,9 @@ const llmService = createLlmService({
       runtimeModel.provider === "openai" &&
       !runtimeModel.plan &&
       process.env.COPILOTKIT_OPENAI_API?.trim() === "chat",
-    reasoningEffort: reasoningEffortFrom(process.env.BOT_REASONING_EFFORT),
+    reasoningEffort: reasoningEffortFrom(
+      process.env.OPENBOT_REASONING_EFFORT,
+    ),
     resolveApiKey: () =>
       resolveModelApiKey({
         encryptionKey: config.keyEncryptionKey,
