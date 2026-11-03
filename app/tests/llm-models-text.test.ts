@@ -106,11 +106,17 @@ describe("a model's conversation budget", () => {
 
 describe("a model's thinking level", () => {
   test("is the sixth field, and survives a round trip", () => {
-    const parsed = parseModelsText("qwen3.8:27b-mlx | | | | 80k | Low\nfast | | | | | none");
+    const parsed = parseModelsText(
+      "qwen3.8:27b-mlx | | | | 80k | Low\nfast | | | | | none",
+    );
     expect(parsed).toEqual({
       ok: true,
       models: [
-        { id: "qwen3.8:27b-mlx", historyTokens: 80_000, reasoningEffort: "low" },
+        {
+          id: "qwen3.8:27b-mlx",
+          historyTokens: 80_000,
+          reasoningEffort: "low",
+        },
         { id: "fast", reasoningEffort: "none" },
       ],
     });
