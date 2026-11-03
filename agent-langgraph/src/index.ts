@@ -518,7 +518,7 @@ async function runAgent(
 serve({
   port: PORT,
   idleTimeout: 120,
-  async fetch(request) {
+  async fetch(request, server) {
     const url = new URL(request.url);
 
     if (url.pathname === "/health") {
@@ -535,6 +535,10 @@ serve({
       if (!hasManagedAgentToken(request, MANAGED_AGENT_TOKEN)) {
         return Response.json({ error: "Unauthorized." }, { status: 401 });
       }
+      // A run stream is silent while the model reads a long prompt: a local model can take minutes
+      // before its first word. Bun closes a connection idle for `idleTimeout` (120 s), which cut such
+      // runs off mid-read. The server's own stall timeout still ends a run that never answers.
+      server.timeout(request, 0);
       const input = (await request.json()) as RunAgentInput;
       return runAgent(input, readManagedModel(request.headers));
     }

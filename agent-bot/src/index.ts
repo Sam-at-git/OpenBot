@@ -276,7 +276,7 @@ async function runAgent(
 serve({
   port: PORT,
   idleTimeout: 120,
-  async fetch(request) {
+  async fetch(request, server) {
     const url = new URL(request.url);
 
     if (url.pathname === "/health") {
@@ -287,6 +287,8 @@ serve({
       if (!hasManagedAgentToken(request, MANAGED_AGENT_TOKEN)) {
         return Response.json({ error: "Unauthorized." }, { status: 401 });
       }
+      // Not cut off while the model reads a long prompt in silence; see agent-langgraph.
+      server.timeout(request, 0);
       const input = (await request.json()) as RunAgentInput;
       return runAgent(input, readManagedModel(request.headers));
     }
