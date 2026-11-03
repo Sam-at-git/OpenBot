@@ -195,7 +195,14 @@ export type ActionResult = {
 };
 
 /** Absent path means the whole workspace. */
-export type ListFilesInput = { path?: string };
+export type ListFilesInput = {
+  path?: string;
+  /** False lists one folder only, for a person browsing. Absent or true walks the tree, as a Bot's listing does. */
+  recursive?: boolean;
+};
+
+/** A person deleting a file or a folder, or making a folder, from the Bot's Files page. */
+export type FilePathInput = { path: string };
 
 /** One thing in the workspace. Folders included, so a Bot can see the shape, not just the leaves. */
 export type WorkspaceEntry = {

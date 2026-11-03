@@ -1,7 +1,9 @@
+import { MAX_COMPUTER_FILE_BYTES } from "@openbot/shared/attachments";
 import { downloadHeaders } from "@openbot/shared/file-download";
 import { isPersonBrowserId } from "@openbot/shared/openbot-browser";
 import type { Context, MiddlewareHandler } from "hono";
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import type { BotAccessCheck } from "../agents/profile-policy";
 import { ApprovalNeedsConversationError } from "../approvals/types";
 import type { AuditReader } from "../audit";
@@ -47,6 +49,16 @@ import { type PolicyStore, parseActionPolicy } from "./policy-store";
  * Every computer call goes through the gateway. That is the governance seam: each acting route in
  * this file passes through a policy decision and audit row before it reaches the computer.
  */
+
+/**
+ * One file a person uploads on a Bot's Files page: the same ceiling as a file attached in a
+ * conversation, under the computer's own 32 MiB.
+ */
+const FILE_UPLOAD_BYTES = MAX_COMPUTER_FILE_BYTES;
+const FILE_UPLOAD_MB = Math.round(FILE_UPLOAD_BYTES / (1024 * 1024));
+/** The JSON envelope: base64 is four bytes for every three, plus room for the path and framing. */
+const FILE_UPLOAD_BODY_BYTES =
+  Math.ceil((FILE_UPLOAD_BYTES * 4) / 3) + 64 * 1024;
 
 /** What a person's own browser answers under this router: the reads its live screen makes. */
 const PERSON_BROWSER_READS = new Set(["control", "status", "screenshot"]);
@@ -784,8 +796,61 @@ export function createComputerRoutes(
         ...(typeof body?.path === "string" && body.path.trim()
           ? { path: body.path.trim() }
           : {}),
+        ...(body?.recursive === false ? { recursive: false } : {}),
       }),
     ),
+  );
+
+  /*
+   * A person's own files into the Bot's computer, from its Files page. The bytes come as base64 in
+   * JSON, the same shape the computer takes, so this route only checks and passes them on. The
+   * envelope is limited before it is parsed; the file's own limit is checked after decoding.
+   */
+  routes.post(
+    "/:botId/files/upload",
+    bodyLimit({
+      maxSize: FILE_UPLOAD_BODY_BYTES,
+      onError: (context) =>
+        context.json(
+          { error: `A file can be at most ${FILE_UPLOAD_MB} MB.` },
+          413,
+        ),
+    }),
+    (context) =>
+      act(context, gateway.seatFor, (seat, actor, body) => {
+        if (typeof body?.path !== "string" || !body.path.trim()) {
+          return { error: "A file path is required." };
+        }
+        if (typeof body.base64 !== "string") {
+          return { error: "The file's contents are required." };
+        }
+        const bytes = Buffer.from(body.base64, "base64");
+        if (bytes.byteLength > FILE_UPLOAD_BYTES) {
+          return { error: `A file can be at most ${FILE_UPLOAD_MB} MB.` };
+        }
+        return gateway.uploadFile(seat, actor, {
+          path: body.path.trim(),
+          bytes,
+        });
+      }),
+  );
+
+  routes.post("/:botId/files/delete", (context) =>
+    act(context, gateway.seatFor, (seat, actor, body) => {
+      if (typeof body?.path !== "string" || !body.path.trim()) {
+        return { error: "A file path is required." };
+      }
+      return gateway.deleteFile(seat, actor, { path: body.path.trim() });
+    }),
+  );
+
+  routes.post("/:botId/files/folder", (context) =>
+    act(context, gateway.seatFor, (seat, actor, body) => {
+      if (typeof body?.path !== "string" || !body.path.trim()) {
+        return { error: "A folder name is required." };
+      }
+      return gateway.makeFolder(seat, actor, { path: body.path.trim() });
+    }),
   );
 
   routes.post("/:botId/files/read", (context) =>

@@ -1501,12 +1501,14 @@ serve<StreamData>({
       if (url.pathname === "/files/list" && request.method === "POST") {
         const body = (await request.json().catch(() => null)) as {
           path?: unknown;
+          recursive?: unknown;
         } | null;
         try {
           const { files } = await workspaces.for(botId);
           return json(
             await files.list(
               typeof body?.path === "string" ? body.path : undefined,
+              { recursive: body?.recursive !== false },
             ),
           );
         } catch (error) {
@@ -1590,6 +1592,42 @@ serve<StreamData>({
         } catch (error) {
           return json(
             { error: describe(error, "The file could not be written.") },
+            fileStatus(error),
+          );
+        }
+      }
+
+      /*
+       * A person tidying the Bot's files from its Files page: delete something, or make a folder.
+       *
+       * Not in `ACTING_PATHS`, so they work while a person holds the wheel: the person holding it is
+       * the one asking. No Bot tool calls these. The gateway decides and records them first, as writes.
+       */
+      if (
+        (url.pathname === "/files/delete" || url.pathname === "/files/folder") &&
+        request.method === "POST"
+      ) {
+        const body = (await request.json().catch(() => null)) as {
+          path?: unknown;
+        } | null;
+        try {
+          const { files } = await workspaces.for(botId);
+          const path = String(body?.path ?? "");
+          return json(
+            url.pathname === "/files/delete"
+              ? await files.remove(path)
+              : await files.makeFolder(path),
+          );
+        } catch (error) {
+          return json(
+            {
+              error: describe(
+                error,
+                url.pathname === "/files/delete"
+                  ? "That couldn't be deleted."
+                  : "The folder couldn't be made.",
+              ),
+            },
             fileStatus(error),
           );
         }

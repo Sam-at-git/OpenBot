@@ -81,6 +81,7 @@ import type {
   ComputerStatus,
   ControlState,
   DownloadFileInput,
+  FilePathInput,
   HumanInput,
   HumanInputResult,
   KeyInput,
@@ -275,6 +276,18 @@ export interface ComputerGateway {
     actor: ActionActor,
     input: { path: string; bytes: Uint8Array },
   ): Promise<{ path: string; bytes: number }>;
+  /** A person deleting a file or folder from the Bot's Files page. Governed as a write. */
+  deleteFile(
+    seat: ComputerSeat,
+    actor: ActionActor,
+    input: FilePathInput,
+  ): Promise<{ path: string }>;
+  /** A person making a folder from the Bot's Files page. Governed as a write. */
+  makeFolder(
+    seat: ComputerSeat,
+    actor: ActionActor,
+    input: FilePathInput,
+  ): Promise<{ path: string }>;
   control(seat: ComputerSeat, requestId?: string): Promise<ControlState>;
   /** `source` is `manual` for a person taking the wheel themselves; the Bot's own requests are `model`. */
   requestHelp(
@@ -1530,6 +1543,30 @@ export function createComputerGateway(
           }),
       );
     },
+
+    /*
+     * Deleting and making a folder are writes to the workspace, so a rule about `write_file` covers
+     * them. Their own tool names keep the audit row honest about which one it was.
+     */
+    deleteFile(seat: ComputerSeat, actor: ActionActor, input: FilePathInput) {
+      return govern(
+        "computer_delete_file",
+        seat,
+        actor,
+        { filePath: input.path },
+        () => post<{ path: string }>(seat, "/files/delete", input),
+      );
+    },
+
+    makeFolder(seat: ComputerSeat, actor: ActionActor, input: FilePathInput) {
+      return govern(
+        "computer_make_folder",
+        seat,
+        actor,
+        { filePath: input.path },
+        () => post<{ path: string }>(seat, "/files/folder", input),
+      );
+    },
   };
 }
 
@@ -1609,6 +1646,8 @@ export function intentOf(
     case "computer_download_file":
       return "download_file";
     case "computer_write_file":
+    case "computer_delete_file":
+    case "computer_make_folder":
       return "write_file";
     case "computer_run_command":
       return "run_command";

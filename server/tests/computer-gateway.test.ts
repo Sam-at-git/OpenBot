@@ -434,6 +434,42 @@ describe("the computer gateway", () => {
     expect(JSON.stringify(rows[0]?.payload)).not.toContain("4111");
   });
 
+  test("deleting and making a folder are writes: recorded by name, refused by a write rule", async () => {
+    const routes = {
+      "/files/delete": () => Response.json({ path: "old.txt" }),
+      "/files/folder": () => Response.json({ path: "ims-manual" }),
+    };
+    const allowed = await gatewayWith(PERMISSIVE, { routes });
+    allowed.rows.length = 0;
+    await allowed.gateway.deleteFile(botSeat("bot-1"), ACTOR, {
+      path: "old.txt",
+    });
+    await allowed.gateway.makeFolder(botSeat("bot-1"), ACTOR, {
+      path: "ims-manual",
+    });
+    expect(
+      allowed.rows.map((row) => [
+        row.eventType,
+        row.payload.action,
+        row.payload.file,
+      ]),
+    ).toEqual([
+      ["computer.action_allowed", "computer_delete_file", "old.txt"],
+      ["computer.action_allowed", "computer_make_folder", "ims-manual"],
+    ]);
+
+    const refused = await gatewayWith(
+      { ...PERMISSIVE, deny: ['intent == "write_file"'] },
+      { routes },
+    );
+    await expect(
+      refused.gateway.deleteFile(botSeat("bot-1"), ACTOR, { path: "old.txt" }),
+    ).rejects.toThrow(ActionRefusedError);
+    await expect(
+      refused.gateway.makeFolder(botSeat("bot-1"), ACTOR, { path: "new" }),
+    ).rejects.toThrow(ActionRefusedError);
+  });
+
   test("a permitted command runs and is recorded by command, never by output", async () => {
     const { gateway, calls, rows } = await gatewayWith(PERMISSIVE);
     await gateway.runCommand(botSeat("bot-1"), ACTOR, {

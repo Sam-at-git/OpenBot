@@ -4,6 +4,7 @@ import {
   IconChevronRight,
   IconClock,
   IconDeviceMobile,
+  IconFolder,
   IconPuzzle,
   IconSettings,
   IconTargetArrow,
@@ -50,6 +51,7 @@ type Row = {
     | "/bots/$agentId/approvals"
     | "/bots/$agentId/routines"
     | "/bots/$agentId/access"
+    | "/bots/$agentId/files"
     | "/bots/$agentId/sharing"
     | "/bots/$agentId/setup";
   title: string;
@@ -162,6 +164,13 @@ export function BotSettingsRows({ agent }: { agent: AgentProfile }) {
             connectorCount(plugins.data),
           )
         : "",
+    },
+    {
+      to: "/bots/$agentId/files",
+      title: "Files",
+      icon: IconFolder,
+      // Not a count: counting would wake a sleeping computer every time this page opens.
+      summary: "Upload and download the files on its computer",
     },
     ...(canShare
       ? [

@@ -103,3 +103,82 @@ export function deleteComputerSecretMutationOptions(queryClient: QueryClient) {
       queryClient.invalidateQueries({ queryKey: computerKeys.secrets() }),
   });
 }
+
+const FILES_FALLBACK = "Couldn't change this Bot's files. Try again.";
+
+function filesPath(botId: string, action: "upload" | "delete" | "folder") {
+  return `/api/computers/${encodeURIComponent(botId)}/files/${action}`;
+}
+
+/** A file's bytes as base64, in slices so a large file does not overflow the argument list. */
+export async function fileAsBase64(file: Blob): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = "";
+  for (let start = 0; start < bytes.length; start += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(start, start + 0x8000));
+  }
+  return btoa(binary);
+}
+
+/** A person putting one of their own files into a Bot's computer, at `path` from its home folder. */
+export function uploadComputerFileMutationOptions(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: async (variables: {
+      botId: string;
+      path: string;
+      file: Blob;
+    }): Promise<void> => {
+      await client(filesPath(variables.botId, "upload"), {
+        method: "POST",
+        body: {
+          path: variables.path,
+          base64: await fileAsBase64(variables.file),
+        },
+        fallback: "Couldn't upload that file. Try again.",
+      });
+    },
+    onSuccess: (_result, variables) =>
+      queryClient.invalidateQueries({
+        queryKey: computerKeys.files(variables.botId),
+      }),
+  });
+}
+
+/** Deleting a file, or a folder with everything in it. */
+export function deleteComputerFileMutationOptions(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: async (variables: {
+      botId: string;
+      path: string;
+    }): Promise<void> => {
+      await client(filesPath(variables.botId, "delete"), {
+        method: "POST",
+        body: { path: variables.path },
+        fallback: FILES_FALLBACK,
+      });
+    },
+    onSuccess: (_result, variables) =>
+      queryClient.invalidateQueries({
+        queryKey: computerKeys.files(variables.botId),
+      }),
+  });
+}
+
+export function makeComputerFolderMutationOptions(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: async (variables: {
+      botId: string;
+      path: string;
+    }): Promise<void> => {
+      await client(filesPath(variables.botId, "folder"), {
+        method: "POST",
+        body: { path: variables.path },
+        fallback: FILES_FALLBACK,
+      });
+    },
+    onSuccess: (_result, variables) =>
+      queryClient.invalidateQueries({
+        queryKey: computerKeys.files(variables.botId),
+      }),
+  });
+}

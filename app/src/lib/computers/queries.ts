@@ -75,7 +75,51 @@ export const computerKeys = {
   policy: () => ["computers", "policy"] as const,
   status: (botId: string) => ["computers", "status", botId] as const,
   secrets: () => ["computers", "secrets"] as const,
+  /** Every folder of one Bot's files, the root a write invalidates. */
+  files: (botId: string) => ["computers", "files", botId] as const,
+  folder: (botId: string, folder: string) =>
+    ["computers", "files", botId, { folder }] as const,
 };
+
+/** One thing in a Bot's files, named from the top of its home folder. */
+export type ComputerFileEntry = {
+  path: string;
+  kind: "file" | "folder";
+  bytes?: number;
+};
+
+export type ComputerFolder = {
+  path: string;
+  entries: ComputerFileEntry[];
+  /** More was there than the listing shows. */
+  truncated: boolean;
+};
+
+/**
+ * One folder of a Bot's files, for its Files page. One level only: a person opens folders one at a
+ * time. Listing wakes a sleeping computer, as any file call does.
+ */
+export function computerFolderQueryOptions(botId: string, folder: string) {
+  return queryOptions({
+    queryKey: computerKeys.folder(botId, folder),
+    queryFn: async (): Promise<ComputerFolder> => {
+      const response = await client(
+        `/api/computers/${encodeURIComponent(botId)}/files/list`,
+        {
+          method: "POST",
+          body: { path: folder || ".", recursive: false },
+          fallback: "Couldn't load this Bot's files.",
+        },
+      );
+      return response.json();
+    },
+  });
+}
+
+/** Where the browser downloads one file. A link, not a request: a download is a navigation. */
+export function computerFileDownloadUrl(botId: string, path: string): string {
+  return `/api/computers/${encodeURIComponent(botId)}/files/download?path=${encodeURIComponent(path)}`;
+}
 
 /** Admin, Computers: the secrets Bots' commands get as environment variables. Names and scopes only, never values. */
 export function computerSecretsQueryOptions() {

@@ -28,6 +28,7 @@ import {
   readFile,
   readlink,
   realpath,
+  rm,
   stat,
   writeFile,
 } from "node:fs/promises";
@@ -203,7 +204,15 @@ export function createWorkspace(
      * listing that stops at the first level would show a `reports` directory and no way in. Bounded by
      * entry count for the same reason everything else here is bounded.
      */
-    async list(requested = "."): Promise<{
+    async list(
+      requested = ".",
+      /**
+       * One folder at a time, for a person browsing the files. A Bot's listing stays recursive; a
+       * person opens folders one by one, and a whole-tree walk would stop at `listEntries` before it
+       * reached the folder they opened.
+       */
+      options: { recursive?: boolean } = {},
+    ): Promise<{
       path: string;
       entries: WorkspaceEntry[];
       truncated: boolean;
@@ -240,7 +249,7 @@ export function createWorkspace(
           const shown = full.slice(root.length + 1);
           if (item.isDirectory()) {
             entries.push({ path: shown, kind: "folder" });
-            await walk(full);
+            if (options.recursive !== false) await walk(full);
             continue;
           }
           if (!item.isFile()) continue;
@@ -370,6 +379,64 @@ export function createWorkspace(
       await mkdir(dirname(full), { recursive: true });
       await writeFile(full, contents);
       return { path: requested, bytes: contents.byteLength };
+    },
+
+    /** A new folder, and any folders above it that are missing. An existing folder is left as it is. */
+    async makeFolder(requested: string): Promise<{ path: string }> {
+      const full = await resolvePath(requested, true);
+      const there = await lstat(full).catch(() => null);
+      if (there && !there.isDirectory()) {
+        throw new WorkspaceFileError(
+          `${requested.trim()} is a file, not a folder.`,
+        );
+      }
+      await mkdir(full, { recursive: true });
+      return { path: requested.trim() };
+    },
+
+    /**
+     * Delete a file, or a folder with everything in it.
+     *
+     * The name itself is removed, never what it points at: `resolvePath` for a read follows a link
+     * to its target, so deleting through it would delete the file a link names rather than the link.
+     * Here the folder holding the name is resolved and checked, and the name is removed from it with
+     * `rm`, which does not follow a link at the last component. The workspace itself cannot be deleted.
+     */
+    async remove(requested: string): Promise<{ path: string }> {
+      if (typeof requested !== "string" || !requested.trim()) {
+        throw new WorkspacePathError("A file path is required.");
+      }
+      const wanted = requested.trim().replace(/[\\/]+$/, "");
+      if (wanted === "" || wanted === ".") {
+        throw new WorkspacePathError("The workspace itself can't be deleted.");
+      }
+      const normal = wanted.replace(/\\/g, "/");
+      const name = basename(normal);
+      if (name === "." || name === "..") {
+        throw new WorkspacePathError(
+          "A file path may not contain '..'. You can only reach files inside your own workspace.",
+        );
+      }
+      const root = await realpath(rootPath);
+      // The folder holding the name gets the same refusals as any read: absolute, `..`, outside
+      // after links. An absolute path never has "." as its folder, so it is refused there.
+      const folder = dirname(normal);
+      const holder =
+        folder === "." ? root : await resolvePath(folder, false);
+      if (!(await stat(holder)).isDirectory()) {
+        throw new WorkspaceFileNotFoundError(`There is nothing at ${wanted}.`);
+      }
+      const target = join(holder, name);
+      assertInside(root, target, wanted);
+      if (target === root) {
+        throw new WorkspacePathError("The workspace itself can't be deleted.");
+      }
+      const there = await lstat(target).catch(() => null);
+      if (!there) {
+        throw new WorkspaceFileNotFoundError(`There is nothing at ${wanted}.`);
+      }
+      await rm(target, { recursive: there.isDirectory(), force: false });
+      return { path: wanted };
     },
   };
 }
