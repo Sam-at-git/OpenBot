@@ -143,17 +143,31 @@ export function planCompaction(
     keepFrom = index;
     if (kept >= KEEP_RECENT * budget) break;
   }
-  const isPerson = (index: number) => messages[index]?.role === "user";
-  // The first of the person's messages at or after that point, else the last one before it.
-  let cut = -1;
-  for (let index = keepFrom; index < messages.length; index += 1)
-    if (isPerson(index)) {
-      cut = index;
-      break;
-    }
+  /*
+   * Where the kept part may begin. The person's messages first, so it begins where they spoke; then the
+   * start of one of the Bot's steps, which never parts a tool call from its result (results follow the
+   * call they answer, so every call before an assistant message has been answered). After the message
+   * that crossed KEEP_RECENT, so a message too big to keep (eight manuals, say) is folded rather than
+   * kept; failing that at it, and failing that the nearest one before.
+   */
+  const role = (index: number) => messages[index]?.role;
+  const firstAfter = (start: number, wanted: (index: number) => boolean) => {
+    for (let index = start; index < messages.length; index += 1)
+      if (wanted(index)) return index;
+    return -1;
+  };
+  const isPerson = (index: number) => role(index) === "user";
+  const isStep = (index: number) =>
+    role(index) === "user" || role(index) === "assistant";
+  // Folded only when it is big on its own; an ordinary message there is where the kept part starts.
+  const start =
+    (sizes[keepFrom] ?? 0) > (KEEP_RECENT * budget) / 2 ? keepFrom + 1 : keepFrom;
+  let cut = firstAfter(start, isPerson);
+  if (cut < 0) cut = firstAfter(start, isStep);
+  if (cut < 0 && isStep(keepFrom)) cut = keepFrom;
   if (cut < 0)
     for (let index = keepFrom - 1; index > from; index -= 1)
-      if (isPerson(index)) {
+      if (isStep(index)) {
         cut = index;
         break;
       }

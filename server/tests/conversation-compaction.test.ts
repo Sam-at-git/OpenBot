@@ -135,6 +135,26 @@ describe("deciding when and where to compact", () => {
     ).not.toBeNull();
   });
 
+  test("a message too big to keep is folded, even with none of the person's messages after it", () => {
+    // u0, a1, u2 (with manuals), then the Bot's steps: assistant, tool, assistant, tool, assistant.
+    const messages: Message[] = [
+      user(words(100), "u0"),
+      { id: "a1", role: "assistant", content: words(100) } as Message,
+      user(words(100), "u2"),
+      { id: "a3", role: "assistant", content: words(300) } as Message,
+      { id: "t4", role: "tool", content: words(300) } as Message,
+      { id: "a5", role: "assistant", content: words(300) } as Message,
+      { id: "t6", role: "tool", content: words(300) } as Message,
+      { id: "a7", role: "assistant", content: words(300) } as Message,
+    ];
+    const plan = planCompaction(messages, null, 10_000, {
+      extraTokens: [0, 0, 9_000, 0, 0, 0, 0, 0],
+    });
+    // The manuals are folded; the kept part starts at one of the Bot's steps, never at a tool result.
+    expect(plan?.cut).toBe(3);
+    expect(messages[plan?.cut ?? 0]?.role).toBe("assistant");
+  });
+
   test("a message's attached files are found by id", () => {
     expect(
       attachmentIdsOf({
