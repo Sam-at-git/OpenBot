@@ -1820,7 +1820,10 @@ const stageAttachmentsForActor =
           id,
         );
         if (!file) continue;
-        if (which && !which({ mimeType: file.mimeType, size: file.bytes.length }))
+        if (
+          which &&
+          !which({ mimeType: file.mimeType, size: file.bytes.length })
+        )
           continue;
         const path = computerUploadPath(file.name);
         try {
