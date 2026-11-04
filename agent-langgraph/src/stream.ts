@@ -151,6 +151,9 @@ export async function streamRun(
        * surface draws a conversation, and a call arriving after the answer it informed reads as
        * though the Bot spoke first and did the work afterwards.
        */
+      // The announced step and the answer after the nudge are two messages, not one run-on sentence.
+      if (event.event === "on_chain_end" && event.name === "nudge") closeText();
+
       if (event.event === "on_chain_end" && event.name === "tools") {
         const output = event.data?.output as
           | { messages?: { tool_call_id?: string; content?: unknown }[] }

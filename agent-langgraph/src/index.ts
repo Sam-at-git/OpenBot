@@ -39,6 +39,7 @@ import {
 } from "../../shared/model-providers";
 import { toLangChainMessages } from "./history";
 import { readReasoningEffort } from "./model-options";
+import { announcesNextStep, NUDGES_PER_RUN, nudgeMessage } from "./nudge";
 import { streamRun } from "./stream";
 import { toolAnswer } from "./tool-answer";
 
@@ -410,6 +411,7 @@ function buildGraph(input: RunAgentInput, chosen?: ManagedModel) {
   const toolTokens = estimateTokens(JSON.stringify(tools));
   const bound = tools.length > 0 ? model.bindTools(tools) : model;
   const ours = deploymentToolsOf(input);
+  let nudges = 0;
 
   return new StateGraph(MessagesAnnotation)
     .addNode("answer", async (state) => ({
@@ -442,11 +444,22 @@ function buildGraph(input: RunAgentInput, chosen?: ManagedModel) {
       );
       return { messages: results };
     })
+    // Asked to take the step it just announced; see `nudge.ts`.
+    .addNode("nudge", () => {
+      nudges += 1;
+      return { messages: [nudgeMessage()] };
+    })
     .addEdge(START, "answer")
     .addConditionalEdges("answer", (state) => {
       const last = state.messages.at(-1) as AIMessage | undefined;
       const calls = last?.tool_calls ?? [];
-      if (calls.length === 0) return END;
+      if (calls.length === 0) {
+        const stalled =
+          tools.length > 0 &&
+          nudges < NUDGES_PER_RUN &&
+          announcesNextStep(contentText(last?.content ?? ""));
+        return stalled ? "nudge" : END;
+      }
       /*
        * A call the surface owns ends the run.
        *
@@ -464,6 +477,7 @@ function buildGraph(input: RunAgentInput, chosen?: ManagedModel) {
       return "tools";
     })
     .addEdge("tools", "answer")
+    .addEdge("nudge", "answer")
     .compile();
 }
 
