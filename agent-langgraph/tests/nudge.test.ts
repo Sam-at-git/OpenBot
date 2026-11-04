@@ -34,9 +34,15 @@ describe("a reply that announces a step and stops", () => {
 describe("the answer after a nudge", () => {
   test("is its own message, not glued onto the announcement", async () => {
     const events: RunStreamEvent[] = [
-      { event: "on_chat_model_stream", data: { chunk: { content: "现在点击「新建」。" } } },
+      {
+        event: "on_chat_model_stream",
+        data: { chunk: { content: "现在点击「新建」。" } },
+      },
       { event: "on_chain_end", name: "nudge", data: {} },
-      { event: "on_chat_model_stream", data: { chunk: { content: "已点击。" } } },
+      {
+        event: "on_chat_model_stream",
+        data: { chunk: { content: "已点击。" } },
+      },
     ];
     const sent: Array<Record<string, unknown>> = [];
     await streamRun(

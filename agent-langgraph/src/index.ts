@@ -413,72 +413,76 @@ function buildGraph(input: RunAgentInput, chosen?: ManagedModel) {
   const ours = deploymentToolsOf(input);
   let nudges = 0;
 
-  return new StateGraph(MessagesAnnotation)
-    .addNode("answer", async (state) => ({
-      messages: [
-        await bound.invoke(trimmedForModel(state.messages, budget, toolTokens)),
-      ],
-    }))
-    .addNode("tools", async (state) => {
-      const last = state.messages.at(-1) as AIMessage;
-      const results = await Promise.all(
+  return (
+    new StateGraph(MessagesAnnotation)
+      .addNode("answer", async (state) => ({
+        messages: [
+          await bound.invoke(
+            trimmedForModel(state.messages, budget, toolTokens),
+          ),
+        ],
+      }))
+      .addNode("tools", async (state) => {
+        const last = state.messages.at(-1) as AIMessage;
+        const results = await Promise.all(
+          /*
+           * Only this deployment's own tools. A component is drawn by the surface, and a decision is
+           * answered there by a person, so neither is executed here and neither gets a result invented
+           * here. The run ends instead, and the surface starts the next one carrying what it produced.
+           */
+          (last.tool_calls ?? [])
+            .filter((call) => ours.has(call.name))
+            .map(async (call) => {
+              const text = await callTool(
+                run,
+                call.name,
+                (call.args ?? {}) as Record<string, unknown>,
+              );
+              return new ToolMessage({
+                content: text,
+                tool_call_id: call.id ?? call.name,
+                name: call.name,
+              });
+            }),
+        );
+        return { messages: results };
+      })
+      // Asked to take the step it just announced; see `nudge.ts`.
+      .addNode("nudge", () => {
+        nudges += 1;
+        return { messages: [nudgeMessage()] };
+      })
+      .addEdge(START, "answer")
+      .addConditionalEdges("answer", (state) => {
+        const last = state.messages.at(-1) as AIMessage | undefined;
+        const calls = last?.tool_calls ?? [];
+        if (calls.length === 0) {
+          const stalled =
+            tools.length > 0 &&
+            nudges < NUDGES_PER_RUN &&
+            announcesNextStep(contentText(last?.content ?? ""));
+          return stalled ? "nudge" : END;
+        }
         /*
-         * Only this deployment's own tools. A component is drawn by the surface, and a decision is
-         * answered there by a person, so neither is executed here and neither gets a result invented
-         * here. The run ends instead, and the surface starts the next one carrying what it produced.
+         * A call the surface owns ends the run.
+         *
+         * This is how a tool that lives in the browser is supposed to work: the Bot asks for it, the
+         * run finishes, the surface draws it or puts the question to a person, and the surface begins
+         * the next run with the answer in hand. Running the loop through it here instead invents a
+         * result: the Bot apologises for a chart the person is looking at, and an approval card that
+         * has already been answered on its behalf sits waiting for a click that can never land.
+         *
+         * A turn that asks for both kinds at once ends too, and the model asks again for what it still
+         * has no answer to. That is the rarer case and the safe way round: the alternative runs a
+         * governed tool whose result nobody is waiting for.
          */
-        (last.tool_calls ?? [])
-          .filter((call) => ours.has(call.name))
-          .map(async (call) => {
-            const text = await callTool(
-              run,
-              call.name,
-              (call.args ?? {}) as Record<string, unknown>,
-            );
-            return new ToolMessage({
-              content: text,
-              tool_call_id: call.id ?? call.name,
-              name: call.name,
-            });
-          }),
-      );
-      return { messages: results };
-    })
-    // Asked to take the step it just announced; see `nudge.ts`.
-    .addNode("nudge", () => {
-      nudges += 1;
-      return { messages: [nudgeMessage()] };
-    })
-    .addEdge(START, "answer")
-    .addConditionalEdges("answer", (state) => {
-      const last = state.messages.at(-1) as AIMessage | undefined;
-      const calls = last?.tool_calls ?? [];
-      if (calls.length === 0) {
-        const stalled =
-          tools.length > 0 &&
-          nudges < NUDGES_PER_RUN &&
-          announcesNextStep(contentText(last?.content ?? ""));
-        return stalled ? "nudge" : END;
-      }
-      /*
-       * A call the surface owns ends the run.
-       *
-       * This is how a tool that lives in the browser is supposed to work: the Bot asks for it, the
-       * run finishes, the surface draws it or puts the question to a person, and the surface begins
-       * the next run with the answer in hand. Running the loop through it here instead invents a
-       * result: the Bot apologises for a chart the person is looking at, and an approval card that
-       * has already been answered on its behalf sits waiting for a click that can never land.
-       *
-       * A turn that asks for both kinds at once ends too, and the model asks again for what it still
-       * has no answer to. That is the rarer case and the safe way round: the alternative runs a
-       * governed tool whose result nobody is waiting for.
-       */
-      if (callsTheSurface(calls, ours)) return END;
-      return "tools";
-    })
-    .addEdge("tools", "answer")
-    .addEdge("nudge", "answer")
-    .compile();
+        if (callsTheSurface(calls, ours)) return END;
+        return "tools";
+      })
+      .addEdge("tools", "answer")
+      .addEdge("nudge", "answer")
+      .compile()
+  );
 }
 
 async function runAgent(
