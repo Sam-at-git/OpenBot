@@ -7,6 +7,7 @@ import { botBrowserRequestSeconds } from "./browser/bot-browser";
 import { browserRequestSeconds } from "./browser/routes";
 import { websocket as channelSocket } from "./channels/socket";
 import type { ComputerGateway } from "./computer/gateway";
+import { computerRequestSeconds } from "./computer/request-seconds";
 import { streamPathBotId } from "./computer/stream-path";
 import type { DeploymentConfig } from "./config";
 
@@ -103,6 +104,10 @@ export function startHttpServer(deps: {
         browserRequestSeconds(url.pathname) ??
         botBrowserRequestSeconds(url.pathname);
       if (browserSeconds !== undefined) server.timeout(request, browserSeconds);
+      // A command waits as long as the command runs, up to the shell's 600 s (computer/request-seconds.ts).
+      const computerSeconds = computerRequestSeconds(url.pathname);
+      if (computerSeconds !== undefined)
+        server.timeout(request, computerSeconds);
       const streamBotId = streamPathBotId(url.pathname);
       if (
         streamBotId !== null &&
