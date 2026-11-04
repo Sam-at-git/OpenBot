@@ -146,6 +146,16 @@ export const ACCEPTED_COMPUTER_FILE_MIME = [
 /** Largest computer file (a PDF, Excel or Word file) one attachment may be. The computer itself takes up to 32 MiB. */
 export const MAX_COMPUTER_FILE_BYTES = 25 * 1024 * 1024;
 
+/**
+ * A text file larger than this goes to a Bot's computer, when it has one, and the model is shown its
+ * beginning and where the rest is. 16 KB of Chinese is about 6,500 tokens; eight manuals inlined in
+ * one message made every later step of a conversation read 200,000.
+ */
+export const COMPUTER_TEXT_BYTES = 16 * 1024;
+
+/** How much of such a file the model is shown, in characters. */
+export const COMPUTER_TEXT_PREVIEW_CHARS = 1_200;
+
 /** Where an attached file is saved in a Bot's computer, relative to its home folder. */
 export function computerUploadPath(name: string): string {
   // Separators and control characters become `_`, so the name stays one file inside `uploads/`.

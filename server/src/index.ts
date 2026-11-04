@@ -3,7 +3,10 @@ import {
   CopilotKitIntelligence,
   IntelligenceAgentRunner,
 } from "@copilotkit/runtime/v2";
-import { computerUploadPath } from "@openbot/shared/attachments";
+import {
+  COMPUTER_TEXT_BYTES,
+  computerUploadPath,
+} from "@openbot/shared/attachments";
 import { computerGuidance } from "@openbot/shared/bot-prompt";
 import { historyBudgetFrom } from "@openbot/shared/history-budget";
 import { reasoningEffortFrom } from "@openbot/shared/model-fetch";
@@ -1502,7 +1505,8 @@ if (config.runtime.mode === "local")
         target: llmService.compactionTarget(agentId),
       })(prompt),
     // What an attached file costs the model when it is put in: text at about its length, an image or a
-    // document the Bot's computer opens at a flat amount.
+    // document the Bot's computer opens at a flat amount. A long text file is shown by its beginning
+    // when the Bot has a computer; without one it is put in whole, and the model's own count says so.
     attachmentTokens: async (ids) => {
       const wanted = [...new Set(ids)].filter((id) =>
         /^[0-9a-f-]{36}$/i.test(id),
@@ -1520,7 +1524,9 @@ if (config.runtime.mode === "local")
         rows.map((row) => [
           row.id,
           /^(text\/|application\/(json|xml|csv|x-ndjson))/.test(row.mimeType)
-            ? Math.ceil(row.sizeBytes * 0.4)
+            ? row.sizeBytes > COMPUTER_TEXT_BYTES
+              ? 1_500
+              : Math.ceil(row.sizeBytes * 0.4)
             : row.mimeType.startsWith("image/")
               ? 1_500
               : 200,
@@ -1795,7 +1801,7 @@ const stageAttachmentsForActor =
     const actor = await actorFor(actorId);
     if (!canUseComputer(await agentProfileStore.get(actor, botId), actor))
       return undefined;
-    return async (threadId, ids) => {
+    return async (threadId, ids, which) => {
       const saved = new Map<string, string>();
       const seat = await computerGateway.seatFor(botId, actor.id);
       const now = Date.now();
@@ -1814,6 +1820,8 @@ const stageAttachmentsForActor =
           id,
         );
         if (!file) continue;
+        if (which && !which({ mimeType: file.mimeType, size: file.bytes.length }))
+          continue;
         const path = computerUploadPath(file.name);
         try {
           await computerGateway.uploadFile(

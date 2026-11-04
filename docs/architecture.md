@@ -166,6 +166,8 @@ Conversations are kept in a SQLite file (`server/src/local-threads/runner.ts`). 
 
 A model is sent the whole conversation on every call, which a long one makes slow. Past 80% of the model's conversation budget (Admin, Models, or `HISTORY_TOKEN_BUDGET`), the earlier part is summarised in the background by the Bot's own model (`server/src/local-threads/compaction.ts`), in sections modelled on Claude Code's compaction: the request, facts, files, errors and fixes, progress, each of the person's messages, pending work, current work and the next step. From then on the model is sent the summary and the most recent 30% of the budget word for word; the summary does not change between calls, so a provider's prompt cache keeps working. At 80% again, the new part is folded into a new summary. Only what the model is sent changes: the stored conversation, and what a person sees, keep every message. Summary calls are counted as `compaction` under Admin, Usage.
 
+Attached files are kept out of the conversation where a computer can hold them. A PDF, Excel or Word file, and a text file over 16 KB, is saved to the Bot's computer at `uploads/<name>`; the model is told where it is, and for a text file is shown its first 1,200 characters. Files on earlier messages are saved too, so a note never names a path that holds nothing. A Bot with no computer, or a file that could not be saved, gets the text whole as before (`server/src/channels/attachment-parts.ts`).
+
 ## Coworkers and channels
 
 A coworker is a durable Bot profile:

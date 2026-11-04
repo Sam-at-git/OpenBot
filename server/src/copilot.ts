@@ -12,7 +12,11 @@ import {
   IntelligenceAgentRunner,
 } from "@copilotkit/runtime/v2";
 import { createCopilotHonoHandler } from "@copilotkit/runtime/v2/hono";
-import { computerUploadPath } from "@openbot/shared/attachments";
+import {
+  COMPUTER_TEXT_BYTES,
+  classifyAttachment,
+  computerUploadPath,
+} from "@openbot/shared/attachments";
 import {
   type ComputerGuidance,
   PROVENANCE_GUIDANCE,
@@ -57,10 +61,12 @@ import type { AuditInitiator } from "./audit";
 import {
   attachmentIdsIn,
   type ComputerFileNote,
+  type ComputerTextNote,
   newInlineBudget,
   resolveAttachmentParts,
   type StoredAttachment,
   savedOnComputerNote,
+  savedTextOnComputerNote,
 } from "./channels/attachment-parts";
 import type { AgentFetch, StallGuard } from "./channels/stall-guard";
 import type { DeploymentConfig } from "./config";
@@ -834,10 +840,37 @@ async function inlineAttachments(
   const askedIds = new Set(
     asked >= 0 ? attachmentIdsIn(messages[asked]?.content) : [],
   );
-  const staged: ReadonlyMap<string, string> =
+  const staged = new Map<string, string>(
     stage && askedIds.size > 0
       ? await stage(threadId, [...askedIds]).catch(() => new Map())
-      : new Map();
+      : new Map(),
+  );
+  /*
+   * And the earlier messages' files that are described rather than put in: a long text file, or one
+   * only the computer can open. One sent before this was saved anywhere, and a note naming a path
+   * that holds nothing sends the Bot looking for a file that is not there. Saved once; see the
+   * stage's own cache.
+   */
+  const earlierIds = new Set(
+    messages
+      .filter((message, index) => message.role === "user" && index !== asked)
+      .flatMap((message) => attachmentIdsIn(message.content))
+      .filter((id) => !askedIds.has(id)),
+  );
+  if (stage && earlierIds.size > 0) {
+    const described = (file: { mimeType: string; size: number }) => {
+      const kind = classifyAttachment(file.mimeType);
+      return (
+        kind === "file" || (kind === "text" && file.size > COMPUTER_TEXT_BYTES)
+      );
+    };
+    for (const [id, path] of await stage(
+      threadId,
+      [...earlierIds],
+      described,
+    ).catch(() => new Map<string, string>()))
+      staged.set(id, path);
+  }
   const computerFile: ComputerFileNote | undefined = stage
     ? (id, file) => {
         const path = staged.get(id);
@@ -845,6 +878,14 @@ async function inlineAttachments(
         if (askedIds.has(id))
           return `The person attached "${file.name}", but it couldn't be saved to your computer. Tell them, and ask them to try again.`;
         return savedOnComputerNote(file, computerUploadPath(file.name));
+      }
+    : undefined;
+  // A long text file, once it is on the computer. Not saved, it is put in whole as before.
+  const computerText: ComputerTextNote | undefined = stage
+    ? (id, file) => {
+        if (file.bytes.length <= COMPUTER_TEXT_BYTES) return null;
+        const path = staged.get(id);
+        return path ? savedTextOnComputerNote(file, path) : null;
       }
     : undefined;
   const inlined = [...messages];
@@ -872,6 +913,7 @@ async function inlineAttachments(
       index === asked ? "fail" : "note",
       budget,
       computerFile,
+      computerText,
     );
     /*
      * AND THIS IS WHERE `attachedAt` IS WRITTEN, for the asked message alone.
@@ -1822,6 +1864,8 @@ export type ModelChoiceForBot = {
 export type StageAttachments = (
   threadId: string,
   attachmentIds: readonly string[],
+  /** Which of them to save, by type and size. Absent: all of them. */
+  which?: (file: { mimeType: string; size: number }) => boolean,
 ) => Promise<ReadonlyMap<string, string>>;
 
 /** How one built-in Bot stages files for this person, or undefined when it has no computer. */

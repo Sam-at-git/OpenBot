@@ -1,5 +1,6 @@
 import {
   attachmentUrl,
+  COMPUTER_TEXT_PREVIEW_CHARS,
   classifyAttachment,
   DOCX_MIME,
   MAX_EXTRACTED_CHARACTERS,
@@ -362,6 +363,7 @@ async function resolvePart(
   onMissing: MissingAttachment,
   budget: InlineBudget | undefined,
   computerFile?: ComputerFileNote,
+  computerText?: ComputerTextNote,
 ): Promise<unknown> {
   /*
    * CUT BEFORE THE LOAD, NOT AFTER IT. The read out of `bytea` is most of what
@@ -441,6 +443,12 @@ async function resolvePart(
       type: "text",
       text: (computerFile ?? noComputerNote)(id, attachment),
     };
+
+  // A long text file on the Bot's computer is shown by its beginning, and costs the budget nothing.
+  if (classifyAttachment(attachment.mimeType) === "text" && computerText) {
+    const note = computerText(id, attachment);
+    if (note) return { type: "text", text: note };
+  }
 
   if (budget) {
     /*
@@ -607,6 +615,29 @@ export function savedOnComputerNote(
   return `The person attached "${file.name}" (${file.mimeType}, ${sizeOf(file.bytes.length)}). It is not shown to you as text. It is saved on your computer at ~/${path} (the path ${path} relative to your home folder, where your commands start); open it there with your computer's tools${how}.`;
 }
 
+/**
+ * A long text file kept on the Bot's computer instead of in the conversation: null to put it in whole.
+ * Null whenever the file is short, or could not be saved, so nothing is ever described as being
+ * somewhere it is not.
+ */
+export type ComputerTextNote = (
+  id: string,
+  file: StoredAttachment,
+) => string | null;
+
+/** For a long text file saved at `path`: its beginning, and where the whole of it is. */
+export function savedTextOnComputerNote(
+  file: StoredAttachment,
+  path: string,
+): string {
+  const full = file.bytes.toString("utf8");
+  let preview = full.slice(0, COMPUTER_TEXT_PREVIEW_CHARS);
+  const lineEnd = preview.lastIndexOf("\n");
+  if (lineEnd > COMPUTER_TEXT_PREVIEW_CHARS / 2)
+    preview = preview.slice(0, lineEnd);
+  return `The person attached "${file.name}" (${file.mimeType}, ${sizeOf(file.bytes.length)}, ${full.length} characters). It is long, so only its beginning is shown here. The whole file is saved on your computer at ~/${path} (the path ${path} relative to your home folder, where your commands start); read it there, for example with grep, sed or cat, when you need more than this.\n\nThe beginning of "${file.name}":\n\n${preview}\n\n[… the rest is in ~/${path}]`;
+}
+
 export async function resolveAttachmentParts(
   content: unknown,
   load: (id: string) => Promise<StoredAttachment | null>,
@@ -614,6 +645,8 @@ export async function resolveAttachmentParts(
   budget?: InlineBudget,
   /** How a file for the Bot's computer is described. Absent: as one this Bot has no computer for. */
   computerFile?: ComputerFileNote,
+  /** How a long text file on the Bot's computer is described. Absent: every text file is put in whole. */
+  computerText?: ComputerTextNote,
 ): Promise<unknown> {
   if (!Array.isArray(content)) return content;
 
@@ -642,6 +675,7 @@ export async function resolveAttachmentParts(
             onMissing,
             budget,
             computerFile,
+            computerText,
           ),
     );
   }
