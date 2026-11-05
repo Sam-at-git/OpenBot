@@ -12,7 +12,10 @@ import {
 import { Observable } from "rxjs";
 import { loadConfig } from "../src/config";
 import { createLocalThreadsClient } from "../src/local-threads/client";
-import { LocalAgentRunner } from "../src/local-threads/runner";
+import {
+  eventsForReplay,
+  LocalAgentRunner,
+} from "../src/local-threads/runner";
 
 /** A Bot that says one thing, as a real model's stream would: started, a text message, finished. */
 class SayingAgent extends AbstractAgent {
@@ -524,5 +527,41 @@ describe("local conversations: nothing a person sent is lost", () => {
     expect(
       replayed.filter((e) => e.type === EventType.TEXT_MESSAGE_CONTENT),
     ).toHaveLength(1);
+  });
+});
+
+describe("replaying a conversation's history", () => {
+  test("drops each run's tools and forwarded props, and keeps its messages and state", () => {
+    const tools = [{ name: "computer_run_command", description: "x".repeat(10_000), parameters: {} }];
+    const started = {
+      type: EventType.RUN_STARTED,
+      threadId: "t1",
+      runId: "r1",
+      input: {
+        threadId: "t1",
+        runId: "r1",
+        state: { step: 2 },
+        messages: [{ id: "m1", role: "user", content: "请分析 2026 目录" }],
+        tools,
+        context: [{ description: "page", value: "y".repeat(1_000) }],
+        forwardedProps: { model: "z".repeat(1_000) },
+      },
+    };
+    const text = { type: EventType.TEXT_MESSAGE_CONTENT, messageId: "a1", delta: "好的" };
+
+    const [replayed, untouched] = eventsForReplay([started, text] as never) as never as [
+      typeof started,
+      typeof text,
+    ];
+
+    expect(replayed.input.messages).toEqual(started.input.messages);
+    expect(replayed.input.state).toEqual({ step: 2 });
+    expect(replayed.input.tools).toEqual([]);
+    expect(replayed.input.context).toEqual([]);
+    expect(replayed.input.forwardedProps).toEqual({});
+    expect(replayed.runId).toBe("r1");
+    expect(untouched).toBe(text);
+    // What is stored is not changed.
+    expect(started.input.tools).toBe(tools);
   });
 });

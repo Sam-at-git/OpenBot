@@ -101,6 +101,27 @@ export class LocalThreadLockError extends Error {
   }
 }
 
+/**
+ * A thread's stored events as they are replayed to a browser opening the conversation.
+ *
+ * Each run's RUN_STARTED keeps the whole input it started with, and most of that is the tool
+ * definitions and forwarded props sent with every run (about 75 KB a run here). Opening a 200-run
+ * conversation sent 16 MB, nearly all of it those, which was slow and, through a proxy, could be cut
+ * off part-way so the history showed only part of the conversation. A replay only draws the
+ * conversation, so those are sent empty; the messages and state stay, and nothing stored changes.
+ */
+export function eventsForReplay(events: BaseEvent[]): BaseEvent[] {
+  return events.map((event) => {
+    if (event.type !== EventType.RUN_STARTED) return event;
+    const started = event as RunStartedEvent;
+    if (!started.input) return event;
+    return {
+      ...started,
+      input: { ...started.input, tools: [], context: [], forwardedProps: {} },
+    } as BaseEvent;
+  });
+}
+
 export class LocalAgentRunner extends AgentRunner {
   readonly ɵsupportsLocalThreadEndpoints = true as const;
 
@@ -915,8 +936,10 @@ export class LocalAgentRunner extends AgentRunner {
     const emitted = new Set<string>();
     // The run still streaming is replayed by its live connection below, not from its checkpoint.
     const live = this.liveRunId(request.threadId);
-    for (const event of compactEvents(
-      this.storedRuns(request.threadId, live).flatMap((run) => run.events),
+    for (const event of eventsForReplay(
+      compactEvents(
+        this.storedRuns(request.threadId, live).flatMap((run) => run.events),
+      ),
     )) {
       subject.next(event);
       if ("messageId" in event && typeof event.messageId === "string")
@@ -1022,9 +1045,11 @@ export class LocalAgentRunner extends AgentRunner {
     scope?: LocalThreadEndpointScope,
   ): BaseEvent[] {
     if (!this.isOwnedBy(threadId, scope?.ownerId)) return [];
-    return compactEvents(
-      this.storedRuns(threadId, this.liveRunId(threadId)).flatMap(
-        (run) => run.events,
+    return eventsForReplay(
+      compactEvents(
+        this.storedRuns(threadId, this.liveRunId(threadId)).flatMap(
+          (run) => run.events,
+        ),
       ),
     );
   }
