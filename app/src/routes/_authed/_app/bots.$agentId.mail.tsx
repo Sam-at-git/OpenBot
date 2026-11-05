@@ -149,7 +149,10 @@ function MailSettings({ botId }: { botId: string }) {
                 id="mail-port"
                 inputMode="numeric"
                 onChange={(event) =>
-                  set("port", Number(event.target.value.replace(/\D/g, "")) || 0)
+                  set(
+                    "port",
+                    Number(event.target.value.replace(/\D/g, "")) || 0,
+                  )
                 }
                 value={String(draft.port)}
               />
@@ -239,7 +242,9 @@ function MailSettings({ botId }: { botId: string }) {
               value={String(draft.intervalMinutes)}
             >
               <SelectTrigger id="mail-interval">
-                <SelectValue>{intervalLabel(draft.intervalMinutes)}</SelectValue>
+                <SelectValue>
+                  {intervalLabel(draft.intervalMinutes)}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
@@ -343,10 +348,13 @@ function MailSettings({ botId }: { botId: string }) {
 
 function statusLine(mailbox: Mailbox): string {
   if (mailbox.lastStatus === "running") return "Checking now…";
-  if (!mailbox.lastRunAt) return "Not checked yet. The first check copies the last 7 days of mail.";
+  if (!mailbox.lastRunAt)
+    return "Not checked yet. The first check copies the last 7 days of mail.";
   const when = relativeTime(mailbox.lastRunAt);
   if (mailbox.lastStatus === "error") return `The last check, ${when}, failed:`;
   const count = mailbox.lastNewCount ?? 0;
-  const next = mailbox.enabled ? ` Next check ${relativeTime(mailbox.nextRunAt)}.` : "";
+  const next = mailbox.enabled
+    ? ` Next check ${relativeTime(mailbox.nextRunAt)}.`
+    : "";
   return `Last checked ${when}: ${count === 0 ? "nothing new" : count === 1 ? "1 new message" : `${count} new messages`}.${next}`;
 }
