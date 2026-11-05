@@ -5,6 +5,7 @@ import {
   IconClock,
   IconDeviceMobile,
   IconFolder,
+  IconMail,
   IconPuzzle,
   IconSettings,
   IconTargetArrow,
@@ -52,6 +53,7 @@ type Row = {
     | "/bots/$agentId/routines"
     | "/bots/$agentId/access"
     | "/bots/$agentId/files"
+    | "/bots/$agentId/mail"
     | "/bots/$agentId/sharing"
     | "/bots/$agentId/setup";
   title: string;
@@ -171,6 +173,12 @@ export function BotSettingsRows({ agent }: { agent: AgentProfile }) {
       icon: IconFolder,
       // Not a count: counting would wake a sleeping computer every time this page opens.
       summary: "Upload and download the files on its computer",
+    },
+    {
+      to: "/bots/$agentId/mail",
+      title: "Mail",
+      icon: IconMail,
+      summary: "Copy new mail from an IMAP mailbox to its computer",
     },
     ...(canShare
       ? [

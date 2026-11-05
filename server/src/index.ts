@@ -35,7 +35,7 @@ import {
   readApprovedRunAssertion,
   readRunAssertion,
 } from "./agents/callback-token";
-import { canUseComputer } from "./agents/computer-access";
+import { canUseComputer, computerAccessCheck } from "./agents/computer-access";
 import { wireCoordination } from "./agents/coordination-wiring";
 import { createAgentFetch } from "./agents/endpoint";
 import { createHandoffDesk } from "./agents/handoff";
@@ -270,6 +270,8 @@ import {
   restrictCoordinationForRun,
   restrictToolsForRun,
 } from "./proactive/restriction";
+import { createMailboxRunner } from "./mailboxes/runner";
+import { createMailboxStore } from "./mailboxes/store";
 import { createProactiveStore } from "./proactive/store";
 import { createProviderOAuthProxy } from "./provider-oauth";
 import { createRecorderExtension } from "./recorder/wiring";
@@ -2531,6 +2533,33 @@ const proactiveSweep = repeatAfterEach(async () => {
   }
 }, 60_000);
 /*
+ * IMAP mailboxes people gave their Bots: due ones are fetched into the Bot's folder on the owner's
+ * computer by `mail-fetch` (mailboxes/). Only where Bots have computers.
+ */
+const mailboxStore = createMailboxStore(database, config.keyEncryptionKey);
+const mailboxRunner = computerGateway
+  ? createMailboxRunner({
+      store: mailboxStore,
+      gateway: computerGateway,
+      mayUseComputer: async (ownerUserId, agentId) =>
+        computerAccessCheck(agentProfileStore)(await actorFor(ownerUserId), agentId),
+    })
+  : undefined;
+const mailboxSweep = repeatAfterEach(async () => {
+  if (!mailboxRunner) return;
+  try {
+    await mailboxRunner.sweep();
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        type: "mailbox-sweep-error",
+        error: error instanceof Error ? error.name : "UnknownError",
+        timestamp: new Date().toISOString(),
+      }),
+    );
+  }
+}, 60_000);
+/*
  * Follow-ups a Bot scheduled for itself: one headless turn each, through the same turn runner as a
  * routine, into the person's conversation with that Bot. See agents/wake-up.ts.
  */
@@ -3020,6 +3049,9 @@ const app = createApp(
         }
       : {}),
     computerSecrets: computerSecretStore,
+    ...(mailboxRunner
+      ? { mailboxes: { store: mailboxStore, runner: mailboxRunner } }
+      : {}),
     llm: {
       llm: llmService,
       labels: async () => {
@@ -3136,6 +3168,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     wakeUpReaper.stop();
     memorySweep.stop();
     proactiveSweep.stop();
+    mailboxSweep.stop();
     approvalSweep.stop();
     personResponseSweep.stop();
     groupSweep.stop();

@@ -80,6 +80,8 @@ RUN /opt/python/bin/pip install --no-cache-dir \
   && /opt/python/bin/python -c "from rapidocr_onnxruntime import RapidOCR; RapidOCR(); import pymupdf" \
   && rm -rf /root/.cache
 COPY --chmod=755 agent-computer/bin/pdf-ocr /usr/local/bin/pdf-ocr
+# New mail from a Bot's IMAP mailbox into its folder (`mail-fetch`); the standard library only.
+COPY --chmod=755 agent-computer/bin/mail-fetch /usr/local/bin/mail-fetch
 
 # PaddleOCR (PP-OCRv5) and PP-StructureV3 (layout, tables, formulas, seals into Markdown), CPU only.
 # Their models are fetched here, at build time, into /opt/paddlex: a Bot's HOME is its own folder,

@@ -241,6 +241,12 @@ export type RunCommandInput = {
   command: string;
   /** Capped by the computer. Absent takes its default. */
   timeoutMs?: number;
+  /**
+   * Environment for this one command, on top of the Bot's secrets and masked in its output the same
+   * way. Server-side callers only (a mailbox's password for `mail-fetch`); the `/exec` route never
+   * passes one from a browser.
+   */
+  env?: Record<string, string>;
 };
 
 /**

@@ -132,6 +132,9 @@ import {
 } from "./plugins/store";
 import { REFUSAL_MARKER, vendorAnswer } from "./plugins/tools";
 import type { ProactiveEngine } from "./proactive/engine";
+import { createMailboxRoutes } from "./mailboxes/routes";
+import type { MailboxRunner } from "./mailboxes/runner";
+import type { MailboxStore } from "./mailboxes/store";
 import { createProactiveRoutes } from "./proactive/routes";
 import type { ProactiveStore } from "./proactive/store";
 import {
@@ -436,6 +439,8 @@ export function createApp(
     personalLearning?: PersonalLearningRouteDeps;
     /** Admin, Computers: secrets the Bots' commands get as environment variables (computer/secrets.ts). */
     computerSecrets?: ComputerSecretStore;
+    /** A Bot's IMAP mailbox, fetched into its folder on its owner's computer (mailboxes/). */
+    mailboxes?: { store: MailboxStore; runner: MailboxRunner };
     /** Admin, Models and Admin, Usage (llm/). Absent, neither screen has anything to read. */
     llm?: Pick<Parameters<typeof createLlmRoutes>[0], "llm" | "labels">;
     /** Password accounts and invites (auth/password.ts), when OPENBOT_PASSWORD_SIGN_IN is on. */
@@ -1698,6 +1703,23 @@ export function createApp(
           ...(config.appUrl ? [config.appUrl] : []),
         ],
         audit: auditStore,
+      }),
+    );
+  if (coworker?.mailboxes)
+    app.route(
+      "/api/mailboxes",
+      createMailboxRoutes({
+        store: coworker.mailboxes.store,
+        runner: coworker.mailboxes.runner,
+        requireUser,
+        // The mail lands on the Bot's computer, so the same check as its Files page.
+        canUseComputer: agentProfileStore
+          ? computerAccessCheck(agentProfileStore)
+          : canUseBot,
+        trustedOrigins: [
+          ...(config.auth?.trustedOrigins ?? []),
+          ...(config.appUrl ? [config.appUrl] : []),
+        ],
       }),
     );
   if (coworker?.computerSecrets)

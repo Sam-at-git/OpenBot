@@ -1544,11 +1544,15 @@ export function createComputerGateway(
         actor,
         { command: input.command, ...(caller ? { signal: caller } : {}) },
         async () => {
-          const env = (await options.secretsFor?.(seat.botId)) ?? {};
+          const { env: own, ...command } = input;
+          const env = {
+            ...((await options.secretsFor?.(seat.botId)) ?? {}),
+            ...(own ?? {}),
+          };
           return post<RunCommandResult>(
             seat,
             "/exec",
-            Object.keys(env).length > 0 ? { ...input, env } : input,
+            Object.keys(env).length > 0 ? { ...command, env } : command,
             caller,
             COMMAND_BACKSTOP_MS,
           );

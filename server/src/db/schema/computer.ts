@@ -4,15 +4,20 @@
  * Split by owner so two people can add tables all day without touching the same lines. Add tables
  * here; never edit core.ts or coworker.ts to do it.
  */
+import { sql } from "drizzle-orm";
 import {
+  boolean,
+  check,
   index,
   integer,
   pgTable,
   primaryKey,
   text,
   timestamp,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import type { RuleLabel } from "../../computer/policy";
+import { agents, users } from "./core";
 import { jsonb } from "./json";
 
 /**
@@ -135,5 +140,66 @@ export const computerPageFrame = pgTable(
     primaryKey({ columns: [table.computerId, table.toolCallId] }),
     // The reaper's query: everything older than the retention window, whoever it belongs to.
     index("computer_page_frame_captured_idx").on(table.capturedAt),
+  ],
+);
+
+/**
+ * An IMAP mailbox a person gave one of their Bots: new mail is fetched into the Bot's folder on
+ * that person's computer (`mail-fetch`), every `interval_minutes` and on demand.
+ *
+ * One per person and Bot, like the computer folder it fills. The password is encrypted with the
+ * deployment's key and reaches only the `mail-fetch` command, as an environment variable masked in
+ * its output; it is never sent back to a browser. The mailbox is only read.
+ */
+export const mailboxes = pgTable(
+  "mailboxes",
+  {
+    id: text("id").primaryKey(),
+    ownerUserId: text("owner_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    agentId: text("agent_id")
+      .notNull()
+      .references(() => agents.id, { onDelete: "cascade" }),
+    host: text("host").notNull(),
+    port: integer("port").notNull().default(993),
+    security: text("security").notNull().default("ssl"),
+    username: text("username").notNull(),
+    encryptedPassword: text("encrypted_password").notNull(),
+    folder: text("folder").notNull().default("INBOX"),
+    enabled: boolean("enabled").notNull().default(true),
+    intervalMinutes: integer("interval_minutes").notNull().default(15),
+    nextRunAt: timestamp("next_run_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    lastRunAt: timestamp("last_run_at", { withTimezone: true }),
+    lastStatus: text("last_status").notNull().default("idle"),
+    lastError: text("last_error"),
+    lastNewCount: integer("last_new_count"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("mailboxes_owner_agent_idx").on(
+      table.ownerUserId,
+      table.agentId,
+    ),
+    index("mailboxes_due_idx").on(table.enabled, table.nextRunAt),
+    check(
+      "mailboxes_interval_check",
+      sql`${table.intervalMinutes} >= 5 AND ${table.intervalMinutes} <= 1440`,
+    ),
+    check(
+      "mailboxes_security_check",
+      sql`${table.security} IN ('ssl', 'starttls', 'plain')`,
+    ),
+    check(
+      "mailboxes_status_check",
+      sql`${table.lastStatus} IN ('idle', 'running', 'succeeded', 'error')`,
+    ),
   ],
 );
