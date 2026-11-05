@@ -214,3 +214,58 @@ export async function readThreadMessages(
     if (timeout !== undefined) clearTimeout(timeout);
   }
 }
+
+/** A page of stored messages, and whether older ones are left to fetch. */
+export type StoredPage = StoredThread & { hasMore: boolean };
+
+/** How many messages a page of history holds; the server widens it back to a person's message. */
+export const HISTORY_PAGE_MESSAGES = 20;
+
+/**
+ * One page of a conversation's stored messages: the latest ones, or the ones before `before`.
+ *
+ * A conversation opens on its latest page and fetches older pages as the reader scrolls up, so
+ * opening a long conversation costs the same as a short one (`/api/thread-history`, local mode).
+ * Bounded by the same deadline as {@link readThreadMessages}; a page that does not arrive reads as
+ * unavailable, and as having nothing older, so nothing waits on it.
+ */
+export async function readThreadPage(
+  threadId: string,
+  options: { before?: string; limit?: number; deadlineMs?: number } = {},
+): Promise<StoredPage> {
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const unavailable: StoredPage = { ...UNAVAILABLE_THREAD, hasMore: false };
+  const query = new URLSearchParams({
+    limit: String(options.limit ?? HISTORY_PAGE_MESSAGES),
+    ...(options.before ? { before: options.before } : {}),
+  });
+  try {
+    const read = async (): Promise<StoredPage> => {
+      const response = await tryClient(
+        `/api/thread-history/${encodeURIComponent(threadId)}?${query}`,
+        { signal: controller.signal },
+      );
+      if (!response.ok) return unavailable;
+      const body: unknown = await response.json();
+      if (typeof body !== "object" || body === null) return unavailable;
+      const { messages, hasMore } = body as {
+        messages?: unknown;
+        hasMore?: unknown;
+      };
+      if (!Array.isArray(messages)) return unavailable;
+      return { ...readableTurns(messages), hasMore: hasMore === true };
+    };
+    const deadline = new Promise<StoredPage>((resolve) => {
+      timeout = setTimeout(() => {
+        controller.abort();
+        resolve(unavailable);
+      }, options.deadlineMs ?? THREAD_MESSAGES_DEADLINE_MS);
+    });
+    return await Promise.race([read(), deadline]);
+  } catch {
+    return unavailable;
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+  }
+}

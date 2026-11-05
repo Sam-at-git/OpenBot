@@ -40,7 +40,7 @@ import { ConversationProvider } from "@/lib/copilot/conversation";
 import { afterMs, joinWithin } from "@/lib/copilot/join-thread";
 import { repairUnansweredToolCalls } from "@/lib/copilot/repair-history";
 import { stoppedReason } from "@/lib/copilot/stopped-turn";
-import { readThreadMessages } from "@/lib/copilot/thread-messages";
+import { readThreadPage } from "@/lib/copilot/thread-messages";
 import { TurnUsageProvider, useTurnUsage } from "@/lib/copilot/turn-usage";
 import { useSkillCommands } from "@/lib/plugins/skill-commands";
 import {
@@ -384,6 +384,36 @@ export function ChannelChat({
    */
   const agentRef = useRef(agent);
   agentRef.current = agent;
+
+  /*
+   * Older messages, a page at a time, when the reader reaches the top of what is held. The page is
+   * the one before the first stored message on screen (a system line this screen added is not on
+   * the server), and goes in front; the transcript draws it above the reader without moving them.
+   */
+  const [hasOlder, setHasOlder] = useState(false);
+  const loadingOlder = useRef(false);
+  const loadOlder = useCallback(async () => {
+    if (loadingOlder.current) return;
+    const current = agentRef.current;
+    const first = current.messages.find((message) => message.role !== "system");
+    if (!first) return;
+    loadingOlder.current = true;
+    try {
+      const page = await readThreadPage(channel.threadId, {
+        before: first.id,
+        deadlineMs: 15_000,
+      });
+      if (page.availability === "unavailable") return;
+      const now = agentRef.current;
+      if (now !== current) return;
+      setHasOlder(page.hasMore);
+      const held = new Set(now.messages.map((message) => message.id));
+      const older = page.messages.filter((message) => !held.has(message.id));
+      if (older.length > 0) now.setMessages([...older, ...now.messages]);
+    } finally {
+      loadingOlder.current = false;
+    }
+  }, [channel.threadId]);
   const voiceArchive = useVoiceArchive(channel.id);
   const [voiceContextNotice, setVoiceContextNotice] = useState<string | null>(
     null,
@@ -419,6 +449,15 @@ export function ChannelChat({
     let current = true;
     const version = ++historyReadVersion.current;
 
+    /*
+     * Replayed only the latest part of the conversation on joining; older messages are fetched as the
+     * reader scrolls up (`loadOlder`). The header is the runner's (`HISTORY_TAIL_HEADER`).
+     */
+    if ("headers" in agent) {
+      const proxied = agent as unknown as { headers?: Record<string, string> };
+      proxied.headers = { ...(proxied.headers ?? {}), "x-openbot-history": "tail" };
+    }
+
     void (async () => {
       try {
         // Bounded, and finished when it returns; `join-thread.ts` has why that matters.
@@ -436,11 +475,13 @@ export function ChannelChat({
       }
 
       try {
-        const stored = await readThreadMessages(
-          channel.threadId,
-          runtimeAgentId,
-        );
+        const stored = await readThreadPage(channel.threadId);
         const isCurrent = current && version === historyReadVersion.current;
+        // Unknown when the page did not arrive: the top of the transcript asks again.
+        if (isCurrent)
+          setHasOlder(
+            stored.availability === "unavailable" ? true : stored.hasMore,
+          );
         if (isCurrent) {
           // The gateway snapshot can lag the store. Keep its valid local rows even when the
           // corresponding stored row is unreadable, while restoring other readable additions.
@@ -471,7 +512,7 @@ export function ChannelChat({
     return () => {
       current = false;
     };
-  }, [copilotkit, agent, isReady, channel.threadId, runtimeAgentId]);
+  }, [copilotkit, agent, isReady, channel.threadId]);
 
   /*
    * A turn nobody here streamed, surfaced while the channel is open.
@@ -529,10 +570,8 @@ export function ChannelChat({
             await new Promise((resolve) => setTimeout(resolve, delayMs));
           }
           if (!isCurrent()) return;
-          const stored = await readThreadMessages(
-            channel.threadId,
-            runtimeAgentId,
-          );
+          // The latest turns are what a refresh is for; older ones stay on the server until scrolled to.
+          const stored = await readThreadPage(channel.threadId, { limit: 40 });
           if (!isCurrent()) return;
           if (stored.availability === "unavailable") {
             // Only an exhausted refresh with no successful read is a failure to announce. Keep the
@@ -588,7 +627,7 @@ export function ChannelChat({
       unsubscribe();
       offFinishedAway();
     };
-  }, [channel.id, channel.threadId, joinGatePromise, runtimeAgentId]);
+  }, [channel.id, channel.threadId, joinGatePromise]);
 
   // Tool calls from this conversation act on this coworker's own computer.
   useActiveBot(runtimeAgentId);
@@ -1154,6 +1193,7 @@ export function ChannelChat({
                * above.
                */
               queueWhileBusy
+              onReachStart={hasOlder ? () => void loadOlder() : undefined}
               restoring={historyLoading}
               /*
                * The run, not the turn. Stop reaches a run through the core's abort controller, and that

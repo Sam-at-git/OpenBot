@@ -122,6 +122,12 @@ type ChatTranscriptProps = {
   /** History has been asked for and has not arrived. Drawn only when there is nothing else to draw. */
   restoring?: boolean;
   /**
+   * Every row is drawn and the reader is near the top: fetch the conversation's older messages, if it
+   * has any. The caller adds them in front of `messages`; they are then drawn a page at a time like
+   * the rest, held in place above the reader.
+   */
+  onReachStart?: () => void;
+  /**
    * Why the last turn ended without an answer, if it did.
    *
    * A sentence rather than a flag, because the reasons are not interchangeable: a Bot that refused,
@@ -1823,6 +1829,7 @@ export function ChatTranscript({
   commandNames = "",
   messages,
   onRemoveQueued,
+  onReachStart,
   queued = EMPTY_QUEUE,
   restoring = false,
   stopped,
@@ -1939,19 +1946,24 @@ export function ChatTranscript({
     restoring,
   );
   const { drawEarlier, drawTo, from: pagesFrom } = pages;
+  const onReachStartRef = useRef(onReachStart);
+  onReachStartRef.current = onReachStart;
   const drawEarlierNearTop = useCallback(
     (from: number) => {
       const element = viewportRef.current;
-      if (
-        element !== null &&
-        shouldDrawEarlier({
-          from,
-          scrollTop: element.scrollTop,
-          scrollHeight: element.scrollHeight,
-        })
-      ) {
+      if (element === null) return;
+      const view = {
+        from,
+        scrollTop: element.scrollTop,
+        scrollHeight: element.scrollHeight,
+      };
+      if (shouldDrawEarlier(view)) {
         drawEarlier();
+        return;
       }
+      // Everything held is drawn: older messages, if any, are still on the server.
+      if (shouldDrawEarlier({ ...view, from: 1 }) && from === 0)
+        onReachStartRef.current?.();
     },
     [drawEarlier],
   );

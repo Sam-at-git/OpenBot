@@ -122,6 +122,49 @@ export function eventsForReplay(events: BaseEvent[]): BaseEvent[] {
   });
 }
 
+/** How many of a conversation's latest messages a browser opens it with (`x-openbot-history: tail`). */
+export const HISTORY_TAIL_MESSAGES = 20;
+/** The request header a conversation page sends on its join to be replayed only the latest part. */
+export const HISTORY_TAIL_HEADER = "x-openbot-history";
+
+/**
+ * Where a page of `limit` messages ending before `end` starts: moved back to one of the person's
+ * messages, so a page never begins with a reply, or with a tool's result apart from its call.
+ */
+export function pageStart(
+  messages: readonly Message[],
+  end: number,
+  limit: number,
+): number {
+  let start = Math.max(0, end - limit);
+  while (start > 0 && messages[start]?.role !== "user") start -= 1;
+  return start;
+}
+
+/**
+ * The conversation the agent is given: what the browser sent, with the stored messages older than the
+ * first one it holds put back in front.
+ *
+ * A conversation page loads only its latest messages and fetches older ones as the person scrolls up,
+ * so what it sends with a turn can begin part-way through. The run is given, and stores, whatever the
+ * agent holds, so without this the Bot lost the start of the conversation and the stored history was
+ * cut down to the page. Only what comes BEFORE the browser's first stored message is restored: later
+ * messages it does not hold are left out, as before.
+ */
+export function withEarlierHistory(
+  stored: readonly Message[],
+  sent: readonly Message[],
+): Message[] | null {
+  if (stored.length === 0 || sent.length === 0) return null;
+  const storedIndex = new Map(stored.map((message, index) => [message.id, index]));
+  const first = sent.find((message) => storedIndex.has(message.id));
+  const at = first ? (storedIndex.get(first.id) ?? 0) : 0;
+  if (at === 0) return null;
+  const sentIds = new Set(sent.map((message) => message.id));
+  const earlier = stored.slice(0, at).filter((message) => !sentIds.has(message.id));
+  return earlier.length > 0 ? [...earlier, ...sent] : null;
+}
+
 export class LocalAgentRunner extends AgentRunner {
   readonly ɵsupportsLocalThreadEndpoints = true as const;
 
@@ -704,6 +747,11 @@ export class LocalAgentRunner extends AgentRunner {
      * conversation (compaction.ts). Only the agent's copy changes: what is stored is put back together
      * below from the thread's own messages, so the summary never becomes part of the conversation.
      */
+    const restored = withEarlierHistory(
+      previousSnapshot,
+      Array.isArray(request.agent.messages) ? request.agent.messages : [],
+    );
+    if (restored) request.agent.setMessages(restored);
     const agentMessagesAtStart: Message[] = Array.isArray(
       request.agent.messages,
     )
@@ -936,10 +984,13 @@ export class LocalAgentRunner extends AgentRunner {
     const emitted = new Set<string>();
     // The run still streaming is replayed by its live connection below, not from its checkpoint.
     const live = this.liveRunId(request.threadId);
+    const stored = this.storedRuns(request.threadId, live);
+    const tail =
+      request.headers?.[HISTORY_TAIL_HEADER]?.toLowerCase() === "tail"
+        ? this.tailRuns(request.threadId, stored)
+        : stored;
     for (const event of eventsForReplay(
-      compactEvents(
-        this.storedRuns(request.threadId, live).flatMap((run) => run.events),
-      ),
+      compactEvents(tail.flatMap((run) => run.events)),
     )) {
       subject.next(event);
       if ("messageId" in event && typeof event.messageId === "string")
@@ -1030,6 +1081,53 @@ export class LocalAgentRunner extends AgentRunner {
         createdAt: new Date(row.created_at).toISOString(),
         updatedAt: new Date(row.updated_at).toISOString(),
       }));
+  }
+
+  /**
+   * The latest runs of a thread, enough to hold its last {@link HISTORY_TAIL_MESSAGES} messages: what a
+   * conversation page is replayed on opening. The rest it fetches with {@link messagesPage} as the
+   * person scrolls up. When the stored messages and the runs cannot be matched up, every run.
+   */
+  private tailRuns(threadId: string, runs: StoredRun[]): StoredRun[] {
+    const messages = this.latestSnapshot(threadId);
+    const start = pageStart(messages, messages.length, HISTORY_TAIL_MESSAGES);
+    const first = messages[start];
+    if (start === 0 || !first) return runs;
+    const seen = new Set<string>();
+    for (let index = runs.length - 1; index >= 0; index -= 1) {
+      for (const event of runs[index]?.events ?? []) {
+        const ids = event as { messageId?: unknown; parentMessageId?: unknown };
+        if (typeof ids.messageId === "string") seen.add(ids.messageId);
+        if (typeof ids.parentMessageId === "string") seen.add(ids.parentMessageId);
+        if (event.type === EventType.RUN_STARTED)
+          for (const message of (event as RunStartedEvent).input?.messages ?? [])
+            seen.add(message.id);
+      }
+      if (seen.has(first.id)) return runs.slice(index);
+    }
+    return runs;
+  }
+
+  /**
+   * A page of a thread's stored messages, newest first: the `limit` before the message `before` (or
+   * the latest), widened back to one of the person's messages. `hasMore` says whether older ones are
+   * left. A `before` the thread does not hold returns nothing, so a page is never repeated.
+   */
+  messagesPage(
+    threadId: string,
+    scope: LocalThreadEndpointScope,
+    options: { before?: string; limit: number },
+  ): { messages: Message[]; hasMore: boolean } {
+    if (!this.isOwnedBy(threadId, scope.ownerId))
+      return { messages: [], hasMore: false };
+    const messages = this.latestSnapshot(threadId);
+    const end =
+      options.before === undefined
+        ? messages.length
+        : messages.findIndex((message) => message.id === options.before);
+    if (end < 0) return { messages: [], hasMore: false };
+    const start = pageStart(messages, end, options.limit);
+    return { messages: messages.slice(start, end), hasMore: start > 0 };
   }
 
   getThreadMessages(

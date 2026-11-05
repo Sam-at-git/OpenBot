@@ -36,6 +36,7 @@ export function ConversationView({
   stoppable,
   queueWhileBusy = false,
   restoring = false,
+  onReachStart,
   onSubmit,
   onStop,
   voiceCall,
@@ -93,6 +94,8 @@ export function ConversationView({
   queueWhileBusy?: boolean;
   /** History has been asked for and has not arrived. Drawn as placeholder rows; see `ChatTranscript`. */
   restoring?: boolean;
+  /** Passed to the transcript: the reader reached the top of everything held. */
+  onReachStart?: () => void;
   onSubmit: (draft: ComposerDraft) => void | Promise<void>;
   /** Stop the Bot mid-answer; forwarded to turn the send button into a stop button. */
   onStop?: () => void;
@@ -433,6 +436,7 @@ export function ConversationView({
             apply({ id, type: "remove" });
           }}
           queued={queued}
+          onReachStart={onReachStart}
           restoring={restoring}
           {...(stopped ? { stopped } : {})}
           working={working}

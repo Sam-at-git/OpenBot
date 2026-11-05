@@ -2038,6 +2038,29 @@ export function createApp(
     );
   }
 
+  /*
+   * A page of a conversation's stored messages, for a conversation page that opened on its latest
+   * ones and is scrolled up: the `limit` messages before `before` (or the latest), and whether older
+   * ones are left. Local mode only, where the conversations are this process's own; scoped to the
+   * person the same way the runtime's own thread reads are.
+   */
+  if (config.runtime.mode === "local") {
+    const { runner } = localThreads(config.runtime.local.dbPath);
+    app.get("/api/thread-history/:threadId", requireUser, (context) => {
+      const before = context.req.query("before")?.trim() || undefined;
+      const asked = Number(context.req.query("limit") ?? "");
+      const limit =
+        Number.isInteger(asked) && asked > 0 ? Math.min(asked, 200) : 20;
+      return context.json(
+        runner.messagesPage(
+          context.req.param("threadId"),
+          { ownerId: context.var.actor.id },
+          { ...(before ? { before } : {}), limit },
+        ),
+      );
+    });
+  }
+
   if (threadIdentity) {
     app.route(
       "/api/threads",

@@ -15,6 +15,8 @@ import { createLocalThreadsClient } from "../src/local-threads/client";
 import {
   eventsForReplay,
   LocalAgentRunner,
+  pageStart,
+  withEarlierHistory,
 } from "../src/local-threads/runner";
 
 /** A Bot that says one thing, as a real model's stream would: started, a text message, finished. */
@@ -563,5 +565,110 @@ describe("replaying a conversation's history", () => {
     expect(untouched).toBe(text);
     // What is stored is not changed.
     expect(started.input.tools).toBe(tools);
+  });
+});
+
+describe("opening a long conversation a page at a time", () => {
+  /** A conversation of `turns` turns, each the person's line and the Bot's reply, sent in full. */
+  async function conversation(turns: number) {
+    const runner = new LocalAgentRunner({ dbPath: ":memory:" });
+    for (let index = 0; index < turns; index += 1) {
+      const held = runner.getThreadMessages("t1", { ownerId: "alice" });
+      await runTurn(runner, {
+        threadId: "t1",
+        ownerId: "alice",
+        messages: [...held, user(`question ${index}`, `u${index}`)],
+        reply: `answer ${index}`,
+      });
+    }
+    return runner;
+  }
+
+  async function replay(runner: LocalAgentRunner, tail: boolean) {
+    const events: BaseEvent[] = [];
+    await new Promise<void>((resolve) =>
+      runner
+        .connect({
+          threadId: "t1",
+          ownerId: "alice",
+          ...(tail ? { headers: { "x-openbot-history": "tail" } } : {}),
+        })
+        .subscribe({ next: (e) => events.push(e), complete: resolve }),
+    );
+    return events.filter((e) => e.type === EventType.RUN_STARTED).length;
+  }
+
+  test("a page starts at one of the person's messages", () => {
+    const messages = [
+      user("a"),
+      { id: "b", role: "assistant", content: "b" },
+      user("c"),
+      { id: "d", role: "assistant", content: "d" },
+      { id: "e", role: "tool", content: "e", toolCallId: "x" },
+    ] as Message[];
+    expect(pageStart(messages, 5, 2)).toBe(2);
+    expect(pageStart(messages, 5, 3)).toBe(2);
+    expect(pageStart(messages, 5, 9)).toBe(0);
+  });
+
+  test("pages back through the stored messages, newest first", async () => {
+    const runner = await conversation(15);
+    const latest = runner.messagesPage("t1", { ownerId: "alice" }, { limit: 20 });
+    expect(latest.messages).toHaveLength(20);
+    expect(latest.messages[0]?.id).toBe("u5");
+    expect(latest.hasMore).toBe(true);
+
+    const older = runner.messagesPage(
+      "t1",
+      { ownerId: "alice" },
+      { before: "u5", limit: 20 },
+    );
+    expect(older.messages.map((m) => m.id).at(0)).toBe("u0");
+    expect(older.messages).toHaveLength(10);
+    expect(older.hasMore).toBe(false);
+
+    // Nobody else's, and never a page for an id the thread does not hold.
+    expect(runner.messagesPage("t1", { ownerId: "bob" }, { limit: 20 }).messages).toEqual([]);
+    expect(
+      runner.messagesPage("t1", { ownerId: "alice" }, { before: "nope", limit: 20 }).messages,
+    ).toEqual([]);
+  });
+
+  test("a conversation page is replayed only its latest runs; anything else, all of them", async () => {
+    const runner = await conversation(15);
+    expect(await replay(runner, false)).toBe(15);
+    const tail = await replay(runner, true);
+    expect(tail).toBeGreaterThanOrEqual(10);
+    expect(tail).toBeLessThan(15);
+  });
+
+  test("a turn sent with only the latest messages keeps the whole conversation", async () => {
+    const runner = await conversation(15);
+    const held = runner.getThreadMessages("t1", { ownerId: "alice" });
+    await runTurn(runner, {
+      threadId: "t1",
+      ownerId: "alice",
+      messages: [...held.slice(-4), user("question 15", "u15")],
+      reply: "answer 15",
+    });
+    const after = runner.getThreadMessages("t1", { ownerId: "alice" });
+    expect(after).toHaveLength(32);
+    expect(after[0]?.id).toBe("u0");
+    expect(after.at(-2)?.id).toBe("u15");
+  });
+
+  test("restores only what comes before the first message the browser holds", () => {
+    const stored = [user("a", "a"), user("b", "b"), user("c", "c")];
+    expect(withEarlierHistory(stored, [user("c", "c"), user("d", "d")])?.map((m) => m.id)).toEqual([
+      "a",
+      "b",
+      "c",
+      "d",
+    ]);
+    // Holding it all, or holding nothing stored: unchanged.
+    expect(withEarlierHistory(stored, stored)).toBeNull();
+    expect(withEarlierHistory(stored, [user("x", "x")])).toBeNull();
+    // A later message the browser dropped is not put back.
+    expect(withEarlierHistory(stored, [user("b", "b")])?.map((m) => m.id)).toEqual(["a", "b"]);
   });
 });
