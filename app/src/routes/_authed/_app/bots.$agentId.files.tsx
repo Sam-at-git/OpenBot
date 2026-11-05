@@ -41,6 +41,7 @@ import {
 import {
   type ComputerFileEntry,
   computerFileDownloadUrl,
+  computerFolderDownloadUrl,
   computerFolderQueryOptions,
 } from "@/lib/computers/queries";
 import { searchTextEntry } from "@/lib/search-text";
@@ -212,6 +213,16 @@ function BotFiles({ botId }: { botId: string }) {
           })}
         </nav>
         <div className="flex gap-2">
+          {entries.length > 0 ? (
+            <a
+              className={buttonVariants({ size: "sm", variant: "outline" })}
+              download
+              href={computerFolderDownloadUrl(botId, folder)}
+            >
+              <IconDownload data-icon="inline-start" />
+              Download all
+            </a>
+          ) : null}
           <Button
             onClick={() => {
               setFolderName("");
@@ -309,19 +320,28 @@ function BotFiles({ botId }: { botId: string }) {
                   </ItemDescription>
                 </ItemContent>
                 <ItemActions>
-                  {entry.kind === "file" ? (
-                    <a
-                      aria-label={`Download ${nameOf(entry.path)}`}
-                      className={buttonVariants({
-                        size: "icon-sm",
-                        variant: "ghost",
-                      })}
-                      download
-                      href={computerFileDownloadUrl(botId, entry.path)}
-                    >
-                      <IconDownload />
-                    </a>
-                  ) : null}
+                  <a
+                    aria-label={
+                      entry.kind === "folder"
+                        ? `Download ${nameOf(entry.path)} as a .zip`
+                        : `Download ${nameOf(entry.path)}`
+                    }
+                    className={buttonVariants({
+                      size: "icon-sm",
+                      variant: "ghost",
+                    })}
+                    download
+                    href={
+                      entry.kind === "folder"
+                        ? computerFolderDownloadUrl(botId, entry.path)
+                        : computerFileDownloadUrl(botId, entry.path)
+                    }
+                    title={
+                      entry.kind === "folder" ? "Download as .zip" : "Download"
+                    }
+                  >
+                    <IconDownload />
+                  </a>
                   <Button
                     aria-label={`Delete ${nameOf(entry.path)}`}
                     onClick={() => setDeleting(entry)}

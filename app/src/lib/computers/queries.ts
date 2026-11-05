@@ -121,6 +121,11 @@ export function computerFileDownloadUrl(botId: string, path: string): string {
   return `/api/computers/${encodeURIComponent(botId)}/files/download?path=${encodeURIComponent(path)}`;
 }
 
+/** Where the browser downloads a whole folder as one .zip. "" is the Bot's whole folder. */
+export function computerFolderDownloadUrl(botId: string, path: string): string {
+  return `/api/computers/${encodeURIComponent(botId)}/files/download-folder?path=${encodeURIComponent(path || ".")}`;
+}
+
 /** Admin, Computers: the secrets Bots' commands get as environment variables. Names and scopes only, never values. */
 export function computerSecretsQueryOptions() {
   return queryOptions({

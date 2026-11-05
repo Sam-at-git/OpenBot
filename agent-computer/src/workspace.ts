@@ -41,6 +41,7 @@ import {
   resolve,
   sep,
 } from "node:path";
+import { type ZipEntry, zipStored } from "./zip";
 
 export class WorkspacePathError extends Error {
   constructor(message: string) {
@@ -74,6 +75,8 @@ export type WorkspaceLimits = {
   listEntries: number;
   /** Most bytes one download may stream, so a large artifact cannot exhaust the connection. */
   downloadBytes: number;
+  /** Most files and folders one folder download may pack. A folder's bytes are bounded by `downloadBytes`. */
+  folderEntries?: number;
 };
 
 /**
@@ -96,6 +99,7 @@ export const DEFAULT_WORKSPACE_LIMITS: WorkspaceLimits = {
   writeBytes: 1_000_000,
   listEntries: 500,
   downloadBytes: 100 * 1024 * 1024,
+  folderEntries: 10_000,
 };
 
 export function createWorkspace(
@@ -333,6 +337,89 @@ export function createWorkspace(
         // Bun serves this file without reading it into memory, and preserves the byte length a
         // ReadableStream response loses. The caller still receives the raw bytes unchanged.
         body: Bun.file(full),
+      };
+    },
+
+    /**
+     * A folder and everything in it, as one stored .zip, for a person downloading it from the Files page.
+     *
+     * The folder itself goes through `resolvePath` like any read. Inside it, a symlink is skipped rather
+     * than followed, the same as the listing, so a link to somewhere outside the workspace cannot carry
+     * that place into the archive. The whole folder is bounded by `downloadBytes`, checked before
+     * anything is read, and by `folderEntries`.
+     */
+    async downloadFolder(requested: string): Promise<{
+      path: string;
+      name: string;
+      bytes: number;
+      body: Blob;
+    }> {
+      const root = await realpath(rootPath);
+      const atRoot = requested === "." || requested.trim() === "";
+      const start = atRoot ? root : await resolvePath(requested, false);
+      const info = await stat(start).catch(() => null);
+      if (!info) {
+        throw new WorkspaceFileNotFoundError(
+          `There is no folder at ${requested}.`,
+        );
+      }
+      if (!info.isDirectory()) {
+        throw new WorkspaceFileError(`${requested} is a file, not a folder.`);
+      }
+
+      const top = atRoot
+        ? "workspace"
+        : basename(requested.replace(/\\/g, "/").replace(/\/+$/, "")) ||
+          "folder";
+      const maxEntries = limits.folderEntries ?? 10_000;
+      const found: { name: string; full?: string; modified: Date }[] = [
+        { name: `${top}/`, modified: info.mtime },
+      ];
+      let total = 0;
+
+      const walk = async (dir: string, inside: string): Promise<void> => {
+        const items = await readdir(dir, { withFileTypes: true });
+        items.sort((a, b) => a.name.localeCompare(b.name));
+        for (const item of items) {
+          if (!item.isDirectory() && !item.isFile()) continue;
+          if (found.length >= maxEntries) {
+            throw new WorkspaceFileTooLargeError(
+              `${requested || "The workspace"} has more than ${maxEntries} files and folders, which is more than one download may pack.`,
+            );
+          }
+          const full = `${dir}/${item.name}`;
+          const name = `${inside}${item.name}`;
+          const itemInfo = await stat(full);
+          if (item.isDirectory()) {
+            found.push({ name: `${name}/`, modified: itemInfo.mtime });
+            await walk(full, `${name}/`);
+            continue;
+          }
+          total += itemInfo.size;
+          if (total > limits.downloadBytes) {
+            throw new WorkspaceFileTooLargeError(
+              `${requested || "The workspace"} holds more than ${limits.downloadBytes} bytes, which is the download limit.`,
+            );
+          }
+          found.push({ name, full, modified: itemInfo.mtime });
+        }
+      };
+      await walk(start, `${top}/`);
+
+      const entries: ZipEntry[] = [];
+      for (const entry of found) {
+        entries.push({
+          name: entry.name,
+          modified: entry.modified,
+          ...(entry.full ? { data: new Uint8Array(await readFile(entry.full)) } : {}),
+        });
+      }
+      const archive = zipStored(entries);
+      return {
+        path: requested,
+        name: `${top}.zip`,
+        bytes: archive.byteLength,
+        body: new Blob([archive]),
       };
     },
 

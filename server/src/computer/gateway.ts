@@ -254,6 +254,17 @@ export interface ComputerGateway {
     bytes: number;
     name: string;
   }>;
+  /** A person downloading a whole folder from the Bot's Files page, as one .zip. Governed as a download. */
+  downloadFolder(
+    seat: ComputerSeat,
+    actor: ActionActor,
+    input: DownloadFileInput,
+    signal?: AbortSignal,
+  ): Promise<{
+    body: ReadableStream<Uint8Array>;
+    bytes: number;
+    name: string;
+  }>;
   listFiles(
     seat: ComputerSeat,
     actor: ActionActor,
@@ -1462,6 +1473,39 @@ export function createComputerGateway(
             ...download,
             name: describeFile(input.path).name || "download",
           };
+        },
+      );
+    },
+
+    /**
+     * A folder as one .zip. Governed as a download of the folder's path, so a rule denying the folder
+     * denies this too. A rule naming one file inside it is not checked file by file.
+     */
+    downloadFolder(
+      seat: ComputerSeat,
+      actor: ActionActor,
+      input: DownloadFileInput,
+      signal?: AbortSignal,
+    ) {
+      return govern(
+        "computer_download_file",
+        seat,
+        actor,
+        { filePath: input.path, ...(signal ? { signal } : {}) },
+        async () => {
+          const download = await transport.download(
+            await locate(seat),
+            addressOf(seat),
+            `/files/download-folder?path=${encodeURIComponent(input.path)}`,
+            signal,
+            DOWNLOAD_BACKSTOP_MS,
+          );
+          const trimmed = input.path.replace(/[\\/]+$/, "");
+          const base =
+            trimmed === "" || trimmed === "."
+              ? "workspace"
+              : describeFile(trimmed).name || "folder";
+          return { ...download, name: `${base}.zip` };
         },
       );
     },

@@ -892,6 +892,27 @@ export function createComputerRoutes(
   });
 
   /*
+   * A whole folder as one .zip, from the Files page. Same guard and the same opaque attachment as one
+   * file; "." is the Bot's whole folder.
+   */
+  routes.get("/:botId/files/download-folder", async (context) => {
+    const path = context.req.query("path")?.trim() || ".";
+    try {
+      const archive = await gateway.downloadFolder(
+        await seatOf(context),
+        actorOf(context.var.actor),
+        { path },
+        context.req.raw.signal,
+      );
+      return new Response(archive.body, {
+        headers: downloadHeaders(archive.name, archive.bytes),
+      });
+    } catch (error) {
+      return actionFailure(context, error);
+    }
+  });
+
+  /*
    * A command on the Bot's computer.
    *
    * Same shape as every other acting route: the gateway decides and records, this only shapes the

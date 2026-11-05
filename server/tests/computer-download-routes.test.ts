@@ -162,3 +162,46 @@ describe("the public computer file download route", () => {
     }
   });
 });
+
+describe("the folder download route", () => {
+  function folderGateway() {
+    const calls: string[] = [];
+    const bytes = Uint8Array.from([0x50, 0x4b, 5, 6]);
+    const gateway = {
+      seatFor: async (botId: string, personId: string) =>
+        personSeat(personId, botId),
+      downloadFolder: async (
+        _seat: { botId: string },
+        _actor: { id: string },
+        input: { path: string },
+      ) => {
+        calls.push(input.path);
+        return { body: bytes, bytes: bytes.byteLength, name: "2026.zip" };
+      },
+    } as unknown as ComputerGateway;
+    return { gateway, calls, bytes };
+  }
+
+  test("returns the folder's .zip as an attachment", async () => {
+    const { gateway, calls, bytes } = folderGateway();
+    const response = await appFor(gateway).request(
+      "http://openbot.test/bot-17/files/download-folder?path=2026",
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-disposition")).toBe(
+      "attachment; filename=\"2026.zip\"; filename*=UTF-8''2026.zip",
+    );
+    expect(response.headers.get("content-length")).toBe("4");
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(bytes);
+    expect(calls).toEqual(["2026"]);
+  });
+
+  test("no path means the Bot's whole folder", async () => {
+    const { gateway, calls } = folderGateway();
+    await appFor(gateway).request(
+      "http://openbot.test/bot-17/files/download-folder",
+    );
+    expect(calls).toEqual(["."]);
+  });
+});

@@ -1483,6 +1483,24 @@ serve<StreamData>({
         }
       }
 
+      // A whole folder as one .zip, for the Files page. Confined and bounded the same way (workspace.ts).
+      if (url.pathname === "/files/download-folder" && request.method === "GET") {
+        try {
+          const { files } = await workspaces.for(botId);
+          const archive = await files.downloadFolder(
+            url.searchParams.get("path") ?? "",
+          );
+          return new Response(archive.body, {
+            headers: downloadHeaders(archive.name, archive.bytes),
+          });
+        } catch (error) {
+          return json(
+            { error: describe(error, "The folder could not be downloaded.") },
+            fileStatus(error),
+          );
+        }
+      }
+
       if (url.pathname === "/files/read" && request.method === "POST") {
         const body = (await request.json().catch(() => null)) as {
           path?: unknown;
