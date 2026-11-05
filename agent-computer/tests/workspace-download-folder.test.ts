@@ -65,7 +65,10 @@ describe("downloading a folder from the workspace", () => {
   test("packs every file and sub-folder under the folder's own name", async () => {
     await mkdir(join(root, "2026", "pp_zd"), { recursive: true });
     await writeFile(join(root, "2026", "合同.txt"), "甲方 乙方");
-    await writeFile(join(root, "2026", "pp_zd", "page.bin"), Buffer.from([0, 1, 255]));
+    await writeFile(
+      join(root, "2026", "pp_zd", "page.bin"),
+      Buffer.from([0, 1, 255]),
+    );
     await mkdir(join(root, "2026", "empty"));
 
     const download = await createWorkspace(root).downloadFolder("2026");
@@ -88,7 +91,9 @@ describe("downloading a folder from the workspace", () => {
     await writeFile(join(root, "notes.md"), "hi");
     const download = await createWorkspace(root).downloadFolder("");
     expect(download.name).toBe("workspace.zip");
-    expect(text((await unzip(download.body)).get("workspace/notes.md"))).toBe("hi");
+    expect(text((await unzip(download.body)).get("workspace/notes.md"))).toBe(
+      "hi",
+    );
   });
 
   test("skips a symlink rather than packing what it points at", async () => {
@@ -97,21 +102,27 @@ describe("downloading a folder from the workspace", () => {
     await symlink(join(outside, "secret.txt"), join(root, "docs", "leak.txt"));
     await symlink(outside, join(root, "docs", "leak-dir"));
 
-    const files = await unzip((await createWorkspace(root).downloadFolder("docs")).body);
+    const files = await unzip(
+      (await createWorkspace(root).downloadFolder("docs")).body,
+    );
     expect([...files.keys()].sort()).toEqual(["docs/", "docs/kept.txt"]);
   });
 
   test("refuses a path outside the workspace", async () => {
-    await expect(createWorkspace(root).downloadFolder("../outside")).rejects.toThrow(
-      WorkspacePathError,
-    );
+    await expect(
+      createWorkspace(root).downloadFolder("../outside"),
+    ).rejects.toThrow(WorkspacePathError);
   });
 
   test("refuses a file, and a folder that is not there", async () => {
     await writeFile(join(root, "a.txt"), "a");
     const ws = createWorkspace(root);
-    await expect(ws.downloadFolder("a.txt")).rejects.toThrow(WorkspaceFileError);
-    await expect(ws.downloadFolder("missing")).rejects.toThrow(WorkspaceFileNotFoundError);
+    await expect(ws.downloadFolder("a.txt")).rejects.toThrow(
+      WorkspaceFileError,
+    );
+    await expect(ws.downloadFolder("missing")).rejects.toThrow(
+      WorkspaceFileNotFoundError,
+    );
   });
 
   test("refuses a folder above the download limit or the entry limit", async () => {
@@ -120,10 +131,16 @@ describe("downloading a folder from the workspace", () => {
     await writeFile(join(root, "big", "b.bin"), "67890");
     const limits = { readBytes: 64_000, writeBytes: 1_000, listEntries: 500 };
     await expect(
-      createWorkspace(root, { ...limits, downloadBytes: 8 }).downloadFolder("big"),
+      createWorkspace(root, { ...limits, downloadBytes: 8 }).downloadFolder(
+        "big",
+      ),
     ).rejects.toThrow(WorkspaceFileTooLargeError);
     await expect(
-      createWorkspace(root, { ...limits, downloadBytes: 1_000, folderEntries: 2 }).downloadFolder("big"),
+      createWorkspace(root, {
+        ...limits,
+        downloadBytes: 1_000,
+        folderEntries: 2,
+      }).downloadFolder("big"),
     ).rejects.toThrow(WorkspaceFileTooLargeError);
   });
 });

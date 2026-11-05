@@ -1484,7 +1484,10 @@ serve<StreamData>({
       }
 
       // A whole folder as one .zip, for the Files page. Confined and bounded the same way (workspace.ts).
-      if (url.pathname === "/files/download-folder" && request.method === "GET") {
+      if (
+        url.pathname === "/files/download-folder" &&
+        request.method === "GET"
+      ) {
         try {
           const { files } = await workspaces.for(botId);
           const archive = await files.downloadFolder(

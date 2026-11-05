@@ -411,7 +411,9 @@ export function createWorkspace(
         entries.push({
           name: entry.name,
           modified: entry.modified,
-          ...(entry.full ? { data: new Uint8Array(await readFile(entry.full)) } : {}),
+          ...(entry.full
+            ? { data: new Uint8Array(await readFile(entry.full)) }
+            : {}),
         });
       }
       const archive = zipStored(entries);

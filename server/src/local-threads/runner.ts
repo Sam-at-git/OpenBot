@@ -156,12 +156,16 @@ export function withEarlierHistory(
   sent: readonly Message[],
 ): Message[] | null {
   if (stored.length === 0 || sent.length === 0) return null;
-  const storedIndex = new Map(stored.map((message, index) => [message.id, index]));
+  const storedIndex = new Map(
+    stored.map((message, index) => [message.id, index]),
+  );
   const first = sent.find((message) => storedIndex.has(message.id));
   const at = first ? (storedIndex.get(first.id) ?? 0) : 0;
   if (at === 0) return null;
   const sentIds = new Set(sent.map((message) => message.id));
-  const earlier = stored.slice(0, at).filter((message) => !sentIds.has(message.id));
+  const earlier = stored
+    .slice(0, at)
+    .filter((message) => !sentIds.has(message.id));
   return earlier.length > 0 ? [...earlier, ...sent] : null;
 }
 
@@ -1098,9 +1102,11 @@ export class LocalAgentRunner extends AgentRunner {
       for (const event of runs[index]?.events ?? []) {
         const ids = event as { messageId?: unknown; parentMessageId?: unknown };
         if (typeof ids.messageId === "string") seen.add(ids.messageId);
-        if (typeof ids.parentMessageId === "string") seen.add(ids.parentMessageId);
+        if (typeof ids.parentMessageId === "string")
+          seen.add(ids.parentMessageId);
         if (event.type === EventType.RUN_STARTED)
-          for (const message of (event as RunStartedEvent).input?.messages ?? [])
+          for (const message of (event as RunStartedEvent).input?.messages ??
+            [])
             seen.add(message.id);
       }
       if (seen.has(first.id)) return runs.slice(index);

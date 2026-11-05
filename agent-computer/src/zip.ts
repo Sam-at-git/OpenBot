@@ -29,7 +29,7 @@ const CRC_TABLE = (() => {
 export function crc32(data: Uint8Array): number {
   let crc = 0xffffffff;
   for (let i = 0; i < data.length; i += 1) {
-    crc = CRC_TABLE[(crc ^ (data[i] ?? 0)) & 0xff]! ^ (crc >>> 8);
+    crc = (CRC_TABLE[(crc ^ (data[i] ?? 0)) & 0xff] ?? 0) ^ (crc >>> 8);
   }
   return (crc ^ 0xffffffff) >>> 0;
 }
@@ -92,7 +92,11 @@ export function zipStored(entries: ZipEntry[]): Uint8Array {
     cv.setUint32(24, data.length, true);
     cv.setUint16(28, name.length, true);
     // External attributes: Unix mode in the high half, and the MS-DOS directory bit for a folder.
-    cv.setUint32(38, (((isFolder ? 0o40755 : 0o100644) << 16) | (isFolder ? 0x10 : 0)) >>> 0, true);
+    cv.setUint32(
+      38,
+      (((isFolder ? 0o40755 : 0o100644) << 16) | (isFolder ? 0x10 : 0)) >>> 0,
+      true,
+    );
     cv.setUint32(42, offset, true);
     central.set(name, 46);
     centrals.push(central);

@@ -455,7 +455,10 @@ export function ChannelChat({
      */
     if ("headers" in agent) {
       const proxied = agent as unknown as { headers?: Record<string, string> };
-      proxied.headers = { ...(proxied.headers ?? {}), "x-openbot-history": "tail" };
+      proxied.headers = {
+        ...(proxied.headers ?? {}),
+        "x-openbot-history": "tail",
+      };
     }
 
     void (async () => {

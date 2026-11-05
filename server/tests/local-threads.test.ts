@@ -534,7 +534,13 @@ describe("local conversations: nothing a person sent is lost", () => {
 
 describe("replaying a conversation's history", () => {
   test("drops each run's tools and forwarded props, and keeps its messages and state", () => {
-    const tools = [{ name: "computer_run_command", description: "x".repeat(10_000), parameters: {} }];
+    const tools = [
+      {
+        name: "computer_run_command",
+        description: "x".repeat(10_000),
+        parameters: {},
+      },
+    ];
     const started = {
       type: EventType.RUN_STARTED,
       threadId: "t1",
@@ -549,12 +555,16 @@ describe("replaying a conversation's history", () => {
         forwardedProps: { model: "z".repeat(1_000) },
       },
     };
-    const text = { type: EventType.TEXT_MESSAGE_CONTENT, messageId: "a1", delta: "好的" };
+    const text = {
+      type: EventType.TEXT_MESSAGE_CONTENT,
+      messageId: "a1",
+      delta: "好的",
+    };
 
-    const [replayed, untouched] = eventsForReplay([started, text] as never) as never as [
-      typeof started,
-      typeof text,
-    ];
+    const [replayed, untouched] = eventsForReplay([
+      started,
+      text,
+    ] as never) as never as [typeof started, typeof text];
 
     expect(replayed.input.messages).toEqual(started.input.messages);
     expect(replayed.input.state).toEqual({ step: 2 });
@@ -613,7 +623,11 @@ describe("opening a long conversation a page at a time", () => {
 
   test("pages back through the stored messages, newest first", async () => {
     const runner = await conversation(15);
-    const latest = runner.messagesPage("t1", { ownerId: "alice" }, { limit: 20 });
+    const latest = runner.messagesPage(
+      "t1",
+      { ownerId: "alice" },
+      { limit: 20 },
+    );
     expect(latest.messages).toHaveLength(20);
     expect(latest.messages[0]?.id).toBe("u5");
     expect(latest.hasMore).toBe(true);
@@ -628,9 +642,15 @@ describe("opening a long conversation a page at a time", () => {
     expect(older.hasMore).toBe(false);
 
     // Nobody else's, and never a page for an id the thread does not hold.
-    expect(runner.messagesPage("t1", { ownerId: "bob" }, { limit: 20 }).messages).toEqual([]);
     expect(
-      runner.messagesPage("t1", { ownerId: "alice" }, { before: "nope", limit: 20 }).messages,
+      runner.messagesPage("t1", { ownerId: "bob" }, { limit: 20 }).messages,
+    ).toEqual([]);
+    expect(
+      runner.messagesPage(
+        "t1",
+        { ownerId: "alice" },
+        { before: "nope", limit: 20 },
+      ).messages,
     ).toEqual([]);
   });
 
@@ -659,16 +679,17 @@ describe("opening a long conversation a page at a time", () => {
 
   test("restores only what comes before the first message the browser holds", () => {
     const stored = [user("a", "a"), user("b", "b"), user("c", "c")];
-    expect(withEarlierHistory(stored, [user("c", "c"), user("d", "d")])?.map((m) => m.id)).toEqual([
-      "a",
-      "b",
-      "c",
-      "d",
-    ]);
+    expect(
+      withEarlierHistory(stored, [user("c", "c"), user("d", "d")])?.map(
+        (m) => m.id,
+      ),
+    ).toEqual(["a", "b", "c", "d"]);
     // Holding it all, or holding nothing stored: unchanged.
     expect(withEarlierHistory(stored, stored)).toBeNull();
     expect(withEarlierHistory(stored, [user("x", "x")])).toBeNull();
     // A later message the browser dropped is not put back.
-    expect(withEarlierHistory(stored, [user("b", "b")])?.map((m) => m.id)).toEqual(["a", "b"]);
+    expect(
+      withEarlierHistory(stored, [user("b", "b")])?.map((m) => m.id),
+    ).toEqual(["a", "b"]);
   });
 });
