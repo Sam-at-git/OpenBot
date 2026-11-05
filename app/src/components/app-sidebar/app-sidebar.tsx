@@ -4,6 +4,8 @@ import { Link, type LinkOptions, useParams } from "@tanstack/react-router";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type * as React from "react";
 import { useRef, useState } from "react";
+import insigmaLogo from "@/assets/brand/insigma-logo.png";
+import insigmaLogoDark from "@/assets/brand/insigma-logo-dark.png";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,8 +34,6 @@ import {
   channelListQueryOptions,
 } from "@/lib/channels/queries";
 import { useChannelEvents } from "@/lib/channels/use-channel-events";
-import insigmaLogo from "@/assets/brand/insigma-logo.png";
-import insigmaLogoDark from "@/assets/brand/insigma-logo-dark.png";
 import { appConfig } from "@/lib/generated/application-config";
 import { EASE_OUT, ENTRANCE_SECONDS } from "@/lib/motion";
 import { navigationFor } from "@/lib/navigation";
@@ -241,7 +241,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     className="hidden h-5 w-auto shrink-0 dark:block"
                     src={insigmaLogoDark}
                   />
-                  <span className="truncate">{appConfig.brand.productName}</span>
+                  <span className="truncate">
+                    {appConfig.brand.productName}
+                  </span>
                 </Link>
               )}
             />
