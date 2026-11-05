@@ -32,6 +32,8 @@ import {
   channelListQueryOptions,
 } from "@/lib/channels/queries";
 import { useChannelEvents } from "@/lib/channels/use-channel-events";
+import insigmaLogo from "@/assets/brand/insigma-logo.png";
+import insigmaLogoDark from "@/assets/brand/insigma-logo-dark.png";
 import { appConfig } from "@/lib/generated/application-config";
 import { EASE_OUT, ENTRANCE_SECONDS } from "@/lib/motion";
 import { navigationFor } from "@/lib/navigation";
@@ -228,7 +230,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               className="font-semibold text-[14px] tracking-tighter h-full leading-tight"
               render={(props) => (
                 <Link {...appLinkOptions} {...props}>
-                  {appConfig.brand.productName}
+                  {/* The company mark, one image per theme, then the product's name beside it. */}
+                  <img
+                    alt=""
+                    className="h-5 w-auto shrink-0 dark:hidden"
+                    src={insigmaLogo}
+                  />
+                  <img
+                    alt=""
+                    className="hidden h-5 w-auto shrink-0 dark:block"
+                    src={insigmaLogoDark}
+                  />
+                  <span className="truncate">{appConfig.brand.productName}</span>
                 </Link>
               )}
             />
