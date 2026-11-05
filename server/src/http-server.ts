@@ -8,9 +8,9 @@ import { browserRequestSeconds } from "./browser/routes";
 import { websocket as channelSocket } from "./channels/socket";
 import type { ComputerGateway } from "./computer/gateway";
 import { computerRequestSeconds } from "./computer/request-seconds";
-import { mailboxRequestSeconds } from "./mailboxes/routes";
 import { streamPathBotId } from "./computer/stream-path";
 import type { DeploymentConfig } from "./config";
+import { mailboxRequestSeconds } from "./mailboxes/routes";
 
 /**
  * The server's front door: one Bun server that hands ordinary requests to the Hono app, proxies the

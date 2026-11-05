@@ -72,9 +72,12 @@ export function parseMailFetchOutput(output: {
         ok: true,
         newCount: Number(parsed.new ?? 0),
         remaining: Number(parsed.remaining ?? 0),
-        saved: Array.isArray(parsed.saved) ? (parsed.saved as MailFetchSaved[]) : [],
+        saved: Array.isArray(parsed.saved)
+          ? (parsed.saved as MailFetchSaved[])
+          : [],
       };
-    if (typeof parsed.error === "string") return { ok: false, error: parsed.error };
+    if (typeof parsed.error === "string")
+      return { ok: false, error: parsed.error };
   } catch {
     // Not mail-fetch's answer: say what the computer did say.
   }
@@ -82,7 +85,8 @@ export function parseMailFetchOutput(output: {
   if (/mail-fetch: (command )?not found/.test(said))
     return {
       ok: false,
-      error: "This Bot's computer is too old to check mail. Restart it to update it.",
+      error:
+        "This Bot's computer is too old to check mail. Restart it to update it.",
     };
   return {
     ok: false,
@@ -104,12 +108,16 @@ export function createMailboxRunner(deps: MailboxRunnerDeps) {
       if (!(await deps.mayUseComputer(mailbox.ownerUserId, mailbox.agentId))) {
         result = {
           ok: false,
-          error: "You can no longer use this Bot's computer, so its mail isn't checked.",
+          error:
+            "You can no longer use this Bot's computer, so its mail isn't checked.",
         };
       } else {
         const password = await deps.store.passwordFor(mailbox.id);
         if (!password) return { ok: false, error: "This mailbox was removed." };
-        const seat = await deps.gateway.seatFor(mailbox.agentId, mailbox.ownerUserId);
+        const seat = await deps.gateway.seatFor(
+          mailbox.agentId,
+          mailbox.ownerUserId,
+        );
         const output = await deps.gateway.runCommand(
           seat,
           {

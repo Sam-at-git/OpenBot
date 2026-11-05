@@ -206,7 +206,12 @@ export function createMailboxStore(database: Database, encryptionKey: string) {
             .returning()
         : await database
             .insert(mailboxes)
-            .values({ id: randomUUID(), ownerUserId: owner, agentId, ...settings })
+            .values({
+              id: randomUUID(),
+              ownerUserId: owner,
+              agentId,
+              ...settings,
+            })
             .returning();
       if (!saved) throw new Error("The mailbox could not be saved.");
       return view(saved);
@@ -234,7 +239,12 @@ export function createMailboxStore(database: Database, encryptionKey: string) {
       const due = await database
         .select({ id: mailboxes.id })
         .from(mailboxes)
-        .where(and(eq(mailboxes.enabled, true), lte(mailboxes.nextRunAt, new Date())))
+        .where(
+          and(
+            eq(mailboxes.enabled, true),
+            lte(mailboxes.nextRunAt, new Date()),
+          ),
+        )
         .limit(Math.min(limit, 10));
       const claimed: MailboxRun[] = [];
       for (const { id } of due) {
@@ -265,7 +275,9 @@ export function createMailboxStore(database: Database, encryptionKey: string) {
         .from(mailboxes)
         .where(eq(mailboxes.id, id))
         .limit(1);
-      return found ? decryptSecret(encryptionKey, found.encryptedPassword) : null;
+      return found
+        ? decryptSecret(encryptionKey, found.encryptedPassword)
+        : null;
     },
 
     async recordRun(
@@ -279,7 +291,8 @@ export function createMailboxStore(database: Database, encryptionKey: string) {
         .set({
           lastRunAt: new Date(),
           lastStatus: result.status,
-          lastError: result.status === "error" ? result.error.slice(0, 500) : null,
+          lastError:
+            result.status === "error" ? result.error.slice(0, 500) : null,
           lastNewCount: result.status === "succeeded" ? result.newCount : null,
           updatedAt: new Date(),
         })

@@ -109,7 +109,12 @@ describe("the mail-fetch command", () => {
     expect(missing.ok).toBe(false);
     expect(!missing.ok && missing.error).toContain("too old");
     expect(
-      parseMailFetchOutput({ stdout: "", stderr: "", exitCode: -1, timedOut: true }).ok,
+      parseMailFetchOutput({
+        stdout: "",
+        stderr: "",
+        exitCode: -1,
+        timedOut: true,
+      }).ok,
     ).toBe(false);
   });
 });
@@ -155,10 +160,11 @@ describe("running a check", () => {
       key: { kind: "person", personId: "alice" },
     });
     expect(calls[0]?.actor).toMatchObject({ id: "alice", userId: "alice" });
-    expect(calls[0]?.input).toMatchObject({ env: { MAIL_PASSWORD: "secret-code" } });
-    expect(JSON.stringify((calls[0]?.input as { command: string }).command)).not.toContain(
-      "secret-code",
-    );
+    expect(calls[0]?.input).toMatchObject({
+      env: { MAIL_PASSWORD: "secret-code" },
+    });
+    const sent = calls[0]?.input as { command: string } | undefined;
+    expect(sent?.command ?? "").not.toContain("secret-code");
     expect(recorded).toEqual([{ status: "succeeded", newCount: 3 }]);
   });
 
@@ -179,13 +185,18 @@ describe("running a check", () => {
     const result = await runner.check(box);
     expect(ran).toBe(false);
     expect(result.ok).toBe(false);
-    expect(recorded).toEqual([{ status: "error", error: expect.stringContaining("no longer") }]);
+    expect(recorded).toEqual([
+      { status: "error", error: expect.stringContaining("no longer") },
+    ]);
   });
 });
 
 describe("the mailbox routes", () => {
   const alice: AgentActor = { id: "alice", role: "user" } as AgentActor;
-  const asAlice: MiddlewareHandler<{ Variables: AppVariables }> = async (context, next) => {
+  const asAlice: MiddlewareHandler<{ Variables: AppVariables }> = async (
+    context,
+    next,
+  ) => {
     context.set("actor", alice as never);
     await next();
   };
@@ -212,11 +223,17 @@ describe("the mailbox routes", () => {
 
   test("someone who can't use the Bot's computer can't see or set its mailbox", async () => {
     const { routes, saved } = app(false);
-    expect((await routes.request("http://x/api/mailboxes/bot-1")).status).toBe(403);
+    expect((await routes.request("http://x/api/mailboxes/bot-1")).status).toBe(
+      403,
+    );
     const put = await routes.request("http://x/api/mailboxes/bot-1", {
       method: "PUT",
       headers: { "content-type": "application/json", origin: "http://x" },
-      body: JSON.stringify({ host: "imap.qq.com", username: "a", password: "p" }),
+      body: JSON.stringify({
+        host: "imap.qq.com",
+        username: "a",
+        password: "p",
+      }),
     });
     expect(put.status).toBe(403);
     expect(saved).toEqual([]);
@@ -227,7 +244,11 @@ describe("the mailbox routes", () => {
     const put = await routes.request("http://x/api/mailboxes/bot-1", {
       method: "PUT",
       headers: { "content-type": "application/json", origin: "http://evil" },
-      body: JSON.stringify({ host: "imap.qq.com", username: "a", password: "p" }),
+      body: JSON.stringify({
+        host: "imap.qq.com",
+        username: "a",
+        password: "p",
+      }),
     });
     expect(put.status).toBe(403);
     expect(saved).toEqual([]);
@@ -238,7 +259,11 @@ describe("the mailbox routes", () => {
     const ok = await routes.request("http://x/api/mailboxes/bot-1", {
       method: "PUT",
       headers: { "content-type": "application/json", origin: "http://x" },
-      body: JSON.stringify({ host: "imap.qq.com", username: "a", password: "p" }),
+      body: JSON.stringify({
+        host: "imap.qq.com",
+        username: "a",
+        password: "p",
+      }),
     });
     expect(ok.status).toBe(200);
     expect(saved).toHaveLength(1);
@@ -248,6 +273,8 @@ describe("the mailbox routes", () => {
       body: JSON.stringify({ host: "", username: "a" }),
     });
     expect(bad.status).toBe(400);
-    expect(((await bad.json()) as { error: string }).error).toContain("IMAP server");
+    expect(((await bad.json()) as { error: string }).error).toContain(
+      "IMAP server",
+    );
   });
 });

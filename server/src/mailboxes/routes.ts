@@ -10,7 +10,11 @@ import { bodyLimit } from "hono/body-limit";
 import type { AgentActor } from "../agents/profile-types";
 import type { AppVariables } from "../auth/guards";
 import { MAIL_FOLDER, type MailboxRunner } from "./runner";
-import { MailboxInputError, type MailboxStore, parseMailboxInput } from "./store";
+import {
+  MailboxInputError,
+  type MailboxStore,
+  parseMailboxInput,
+} from "./store";
 
 export function createMailboxRoutes(input: {
   store: MailboxStore;
@@ -23,16 +27,32 @@ export function createMailboxRoutes(input: {
   const routes = new Hono<{ Variables: AppVariables }>();
   routes.use("*", input.requireUser, bodyLimit({ maxSize: 8_192 }));
   routes.use("/:agentId/*", async (context, next) => {
-    if (!(await input.canUseComputer(context.var.actor, context.req.param("agentId"))))
+    if (
+      !(await input.canUseComputer(
+        context.var.actor,
+        context.req.param("agentId"),
+      ))
+    )
       return context.json({ error: "You can't use this Bot's computer." }, 403);
     await next();
   });
   routes.use("/:agentId", async (context, next) => {
-    if (!(await input.canUseComputer(context.var.actor, context.req.param("agentId"))))
+    if (
+      !(await input.canUseComputer(
+        context.var.actor,
+        context.req.param("agentId"),
+      ))
+    )
       return context.json({ error: "You can't use this Bot's computer." }, 403);
     // A change is only taken from this app's own pages.
-    if (context.req.method !== "GET" && !sameOrigin(context, input.trustedOrigins))
-      return context.json({ error: "That request came from another site." }, 403);
+    if (
+      context.req.method !== "GET" &&
+      !sameOrigin(context, input.trustedOrigins)
+    )
+      return context.json(
+        { error: "That request came from another site." },
+        403,
+      );
     await next();
   });
   routes.onError((error, context) => {
@@ -45,12 +65,18 @@ export function createMailboxRoutes(input: {
         timestamp: new Date().toISOString(),
       }),
     );
-    return context.json({ error: "Mail settings are unavailable. Try again." }, 503);
+    return context.json(
+      { error: "Mail settings are unavailable. Try again." },
+      503,
+    );
   });
 
   routes.get("/:agentId", async (context) =>
     context.json({
-      mailbox: await input.store.get(context.var.actor.id, context.req.param("agentId")),
+      mailbox: await input.store.get(
+        context.var.actor.id,
+        context.req.param("agentId"),
+      ),
       folder: MAIL_FOLDER,
     }),
   );
@@ -78,12 +104,16 @@ export function createMailboxRoutes(input: {
   /** Check now, and say what came in. Waits for the check: at most about two minutes. */
   routes.post("/:agentId/check", async (context) => {
     if (!sameOrigin(context, input.trustedOrigins))
-      return context.json({ error: "That request came from another site." }, 403);
+      return context.json(
+        { error: "That request came from another site." },
+        403,
+      );
     const mailbox = await input.store.runFor(
       context.var.actor.id,
       context.req.param("agentId"),
     );
-    if (!mailbox) return context.json({ error: "Set up the mailbox first." }, 404);
+    if (!mailbox)
+      return context.json({ error: "Set up the mailbox first." }, 404);
     const result = await input.runner.check(mailbox);
     return context.json({
       result,
@@ -95,7 +125,9 @@ export function createMailboxRoutes(input: {
 }
 
 function sameOrigin(
-  context: { req: { url: string; header: (name: string) => string | undefined } },
+  context: {
+    req: { url: string; header: (name: string) => string | undefined };
+  },
   trusted: readonly string[],
 ): boolean {
   const origin = context.req.header("origin");

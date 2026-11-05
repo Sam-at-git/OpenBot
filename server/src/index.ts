@@ -220,6 +220,8 @@ import { createLlmStore } from "./llm/store";
 import { createLocalLearning } from "./local-learning";
 import { LocalLearningStore } from "./local-learning/store";
 import { localThreads } from "./local-threads/client";
+import { createMailboxRunner } from "./mailboxes/runner";
+import { createMailboxStore } from "./mailboxes/store";
 import { createMemoryDefaults } from "./memory/defaults";
 import { createMemoryIngestion } from "./memory/ingestion";
 import { createIntelligenceMemory } from "./memory/intelligence";
@@ -270,8 +272,6 @@ import {
   restrictCoordinationForRun,
   restrictToolsForRun,
 } from "./proactive/restriction";
-import { createMailboxRunner } from "./mailboxes/runner";
-import { createMailboxStore } from "./mailboxes/store";
 import { createProactiveStore } from "./proactive/store";
 import { createProviderOAuthProxy } from "./provider-oauth";
 import { createRecorderExtension } from "./recorder/wiring";
@@ -2542,7 +2542,10 @@ const mailboxRunner = computerGateway
       store: mailboxStore,
       gateway: computerGateway,
       mayUseComputer: async (ownerUserId, agentId) =>
-        computerAccessCheck(agentProfileStore)(await actorFor(ownerUserId), agentId),
+        computerAccessCheck(agentProfileStore)(
+          await actorFor(ownerUserId),
+          agentId,
+        ),
     })
   : undefined;
 const mailboxSweep = repeatAfterEach(async () => {

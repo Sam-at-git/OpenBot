@@ -110,6 +110,9 @@ import {
 } from "./learning/sharing-routes";
 import { createLlmRoutes } from "./llm/routes";
 import { localThreads } from "./local-threads/client";
+import { createMailboxRoutes } from "./mailboxes/routes";
+import type { MailboxRunner } from "./mailboxes/runner";
+import type { MailboxStore } from "./mailboxes/store";
 import type { MemoryIngestion } from "./memory/ingestion";
 import { createMemoryRoutes } from "./memory/routes";
 import type { MemoryStore } from "./memory/store";
@@ -132,9 +135,6 @@ import {
 } from "./plugins/store";
 import { REFUSAL_MARKER, vendorAnswer } from "./plugins/tools";
 import type { ProactiveEngine } from "./proactive/engine";
-import { createMailboxRoutes } from "./mailboxes/routes";
-import type { MailboxRunner } from "./mailboxes/runner";
-import type { MailboxStore } from "./mailboxes/store";
 import { createProactiveRoutes } from "./proactive/routes";
 import type { ProactiveStore } from "./proactive/store";
 import {
