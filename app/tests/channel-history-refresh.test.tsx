@@ -130,9 +130,11 @@ beforeAll(() => {
         return new NativeResponse(null, { status: 204 });
       if (url.pathname === "/api/voice/sessions")
         return NativeResponse.json({ sessions: [], nextCursor: null });
-      const match = url.pathname.match(/\/threads\/([^/]+)\/messages$/);
+      const match = url.pathname.match(
+        /\/(?:threads\/([^/]+)\/messages|thread-history\/([^/]+))$/,
+      );
       if (match) {
-        const threadId = match[1];
+        const threadId = match[1] ?? match[2];
         if (!threadId) throw new Error("Missing fixture thread id");
         historyReads.push(threadId);
         return history(threadId);

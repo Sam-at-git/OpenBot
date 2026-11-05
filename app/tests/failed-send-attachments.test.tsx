@@ -184,7 +184,7 @@ beforeAll(() => {
       }
       if (/\/api\/channels\/[^/]+\/(activity|busy)$/.test(url.pathname))
         return new NativeResponse(null, { status: 204 });
-      if (/\/threads\/[^/]+\/messages$/.test(url.pathname))
+      if (/\/(?:threads\/[^/]+\/messages|thread-history\/[^/]+)$/.test(url.pathname))
         return NativeResponse.json({ messages: [opening] });
       throw new Error(`Unexpected fixture request: ${url.pathname}`);
     },

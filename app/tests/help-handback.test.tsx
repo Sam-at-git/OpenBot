@@ -265,7 +265,7 @@ beforeAll(() => {
         if (body.messages.at(-1)?.role === "tool") await holdAnswer;
         return sse(runEvents(body));
       }
-      if (url.pathname.match(/\/threads\/[^/]+\/messages$/))
+      if (url.pathname.match(/\/(?:threads\/[^/]+\/messages|thread-history\/[^/]+)$/))
         return NativeResponse.json({ messages: stored });
       if (url.pathname === "/api/agents")
         return NativeResponse.json({ agents: [] });
