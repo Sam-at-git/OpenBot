@@ -26,6 +26,7 @@ function serving(available: {
   slack: boolean;
   teams: boolean;
   sms: boolean;
+  imessage: boolean;
   push: boolean;
 }) {
   global.fetch = (async (input: RequestInfo | URL) => {
@@ -67,19 +68,25 @@ const disabled = (element: HTMLElement) =>
   element.hasAttribute("disabled");
 
 test("channels the deployment has not set up are off, disabled and say so", async () => {
-  serving({ slack: false, teams: false, sms: false, push: true });
+  serving({
+    slack: false,
+    teams: false,
+    sms: false,
+    imessage: false,
+    push: true,
+  });
   const view = draw();
   const slack = await view.findByRole("switch", { name: "Progress by Slack" });
   expect(checked(slack)).toBe(false);
   expect(disabled(slack)).toBe(true);
-  expect(view.getAllByText("Not set up").length).toBe(9);
+  expect(view.getAllByText("Not set up").length).toBe(12);
   const push = view.getByRole("switch", { name: "Progress by Push" });
   expect(checked(push)).toBe(true);
   expect(disabled(push)).toBe(false);
 });
 
 test("a configured channel shows the person's preference", async () => {
-  serving({ slack: true, teams: true, sms: true, push: true });
+  serving({ slack: true, teams: true, sms: true, imessage: true, push: true });
   const view = draw();
   const slack = await view.findByRole("switch", { name: "Progress by Slack" });
   expect(checked(slack)).toBe(true);

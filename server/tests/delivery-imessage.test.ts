@@ -97,7 +97,9 @@ describe("the iMessage transport", () => {
     });
     expect(result).toEqual({ id: "m1", status: "sent" });
     expect(calls[0]?.url).toBe("http://bridge:8060/send");
-    const headers = calls[0]?.init.headers as Record<string, string> | undefined;
+    const headers = calls[0]?.init.headers as
+      | Record<string, string>
+      | undefined;
     expect(headers?.authorization).toBe(`Bearer ${TOKEN}`);
     expect(JSON.parse(String(calls[0]?.init.body))).toEqual({
       to: "+8613510363575",
