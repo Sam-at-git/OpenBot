@@ -199,13 +199,14 @@ export function createDeliveryRouter(deps: {
           input.identity,
           input.address,
         );
-    if (
-      !binding?.enabled ||
-      binding.transport !== input.source ||
-      binding.realm !== input.realm ||
-      binding.identity !== input.identity ||
-      !(await deps.authoriseScope(binding))
-    )
+    // A connection named by id must still be this transport's, for this sender.
+    const named =
+      input.bindingId === undefined ||
+      (binding?.enabled === true &&
+        binding.transport === input.source &&
+        binding.realm === input.realm &&
+        binding.identity === input.identity);
+    if (!binding || !named || !(await deps.authoriseScope(binding)))
       return { queued: false };
     // Opted out by STOP: their texts start no turns until they send START.
     if (binding.optedOutAt) return { queued: false };
