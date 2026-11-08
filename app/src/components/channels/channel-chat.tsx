@@ -590,8 +590,7 @@ export function ChannelChat({
     let cancelled = false;
 
     /** Whether this page is in a turn of its own, which streams here and needs no reads. */
-    const inOwnTurn = () =>
-      turnsRef.current > 0 || agentRef.current.isRunning;
+    const inOwnTurn = () => turnsRef.current > 0 || agentRef.current.isRunning;
 
     /** `live`: one read during a turn this page did not start, taking the answer's latest text. */
     const pull = (live = false) => {

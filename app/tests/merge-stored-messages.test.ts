@@ -97,9 +97,9 @@ describe("a turn this page did not start", () => {
   };
 
   test("takes the answer's newer text from the store", () => {
-    expect(mergeStoredMessages([asked, partial], [asked, longer], true)).toEqual(
-      [asked, longer],
-    );
+    expect(
+      mergeStoredMessages([asked, partial], [asked, longer], true),
+    ).toEqual([asked, longer]);
   });
 
   test("without it, a message already shown keeps its text", () => {

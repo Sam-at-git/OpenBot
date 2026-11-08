@@ -1179,7 +1179,11 @@ test("a turn running away from this page is shown as it is written", async () =>
   const asked = { id: "phone-2", role: "user", content: "介绍一下你自己" };
   let answer = "我是";
   history = async () =>
-    stored([initial, asked, { id: "answer", role: "assistant", content: answer }]);
+    stored([
+      initial,
+      asked,
+      { id: "answer", role: "assistant", content: answer },
+    ]);
   const setBusy = (busy: boolean) =>
     act(async () => {
       queryClient.setQueryData<ChannelCache>(channelKeys.list(), (cache) => {
@@ -1195,7 +1199,9 @@ test("a turn running away from this page is shown as it is written", async () =>
   await setBusy(true);
   expect(await view.findByText("我是")).toBeTruthy();
   answer = "我是 ims助手。";
-  expect(await view.findByText("我是 ims助手。", {}, { timeout: 3000 })).toBeTruthy();
+  expect(
+    await view.findByText("我是 ims助手。", {}, { timeout: 3000 }),
+  ).toBeTruthy();
   const reads = historyReads.length;
   await setBusy(false);
   await waitFor(() => expect(historyReads.length).toBe(reads + 1));
