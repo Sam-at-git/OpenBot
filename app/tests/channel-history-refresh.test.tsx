@@ -1165,3 +1165,40 @@ test.each(["mount", "refresh"])(
     expect(currentAgent().messages).toEqual([initial, local, fresh]);
   },
 );
+
+test("a person's line from elsewhere shows before the Bot answers", async () => {
+  const view = await mounted();
+  const fromPhone = { id: "phone-1", role: "user", content: "来自 iMessage" };
+  history = async () => stored([initial, fromPhone]);
+  await announce(5, channel, { agentId: null, text: "来自 iMessage" });
+  expect(await view.findByText("来自 iMessage")).toBeTruthy();
+});
+
+test("a turn running away from this page is shown as it is written", async () => {
+  const view = await mounted();
+  const asked = { id: "phone-2", role: "user", content: "介绍一下你自己" };
+  let answer = "我是";
+  history = async () =>
+    stored([initial, asked, { id: "answer", role: "assistant", content: answer }]);
+  const setBusy = (busy: boolean) =>
+    act(async () => {
+      queryClient.setQueryData<ChannelCache>(channelKeys.list(), (cache) => {
+        if (!cache) throw new Error("No mounted channel cache");
+        const patched = applyChannelEvent(cache, {
+          channelId: channel.id,
+          busy,
+        } as Parameters<typeof applyChannelEvent>[1]);
+        if (patched === "unknown") throw new Error("Channel missing");
+        return patched;
+      });
+    });
+  await setBusy(true);
+  expect(await view.findByText("我是")).toBeTruthy();
+  answer = "我是 ims助手。";
+  expect(await view.findByText("我是 ims助手。", {}, { timeout: 3000 })).toBeTruthy();
+  const reads = historyReads.length;
+  await setBusy(false);
+  await waitFor(() => expect(historyReads.length).toBe(reads + 1));
+  await new Promise((resolve) => setTimeout(resolve, 1700));
+  expect(historyReads.length).toBe(reads + 1);
+}, 10_000);

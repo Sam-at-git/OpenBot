@@ -86,3 +86,39 @@ describe("mergeStoredMessages", () => {
     ]);
   });
 });
+
+describe("a turn this page did not start", () => {
+  const asked: Message = { id: "u-1", role: "user", content: "介绍一下你自己" };
+  const partial: Message = { id: "a-1", role: "assistant", content: "我是" };
+  const longer: Message = {
+    id: "a-1",
+    role: "assistant",
+    content: "我是 ims助手。",
+  };
+
+  test("takes the answer's newer text from the store", () => {
+    expect(mergeStoredMessages([asked, partial], [asked, longer], true)).toEqual(
+      [asked, longer],
+    );
+  });
+
+  test("without it, a message already shown keeps its text", () => {
+    const local = [asked, partial];
+    expect(mergeStoredMessages(local, [asked, longer])).toBe(local);
+  });
+
+  test("still adds what is missing, and is unchanged when nothing differs", () => {
+    expect(mergeStoredMessages([asked], [asked, partial], true)).toEqual([
+      asked,
+      partial,
+    ]);
+    const local = [asked, longer];
+    expect(mergeStoredMessages(local, [asked, longer], true)).toBe(local);
+  });
+
+  test("never rewrites the person's own line", () => {
+    const edited: Message = { ...asked, content: "changed" };
+    const local = [asked];
+    expect(mergeStoredMessages(local, [edited], true)).toBe(local);
+  });
+});

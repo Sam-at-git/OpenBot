@@ -73,6 +73,9 @@ const JOIN_DEADLINE_MS = 1500;
  */
 const SEND_WITHOUT_RUNTIME_AFTER_MS = 1500;
 
+/** How often a turn running away from this page is read while it writes. */
+const LIVE_READ_MS = 1500;
+
 type ChannelActivitySignature = {
   agentId: string;
   at: string;
@@ -178,7 +181,31 @@ export function channelHistoryNotice({
 export function mergeStoredMessages(
   local: Message[],
   stored: Message[],
+  /**
+   * Also take the store's version of a Bot message this page already shows, when it differs: a
+   * turn this page did not start (iMessage, SMS, a relay) is saved as it is written, so each read
+   * holds more of the answer. Only for such a turn — a turn this page streams owns its own text.
+   */
+  updateHeld = false,
 ): Message[] {
+  if (updateHeld) {
+    const storedById = new Map(stored.map((message) => [message.id, message]));
+    let changed = false;
+    const updated = local.map((message) => {
+      const newer = storedById.get(message.id);
+      if (
+        !newer ||
+        message.role !== "assistant" ||
+        newer.role !== "assistant" ||
+        JSON.stringify(newer) === JSON.stringify(message)
+      )
+        return message;
+      changed = true;
+      return newer;
+    });
+    const merged = mergeStoredMessages(updated, stored);
+    return changed || merged !== updated ? merged : local;
+  }
   const localIds = new Set(local.map((message) => message.id));
   /*
    * The store can name a tool call's message differently from the live turn — `assistant-call_1`
@@ -562,13 +589,18 @@ export function ChannelChat({
     let lastSeen = initialActivity;
     let cancelled = false;
 
-    const pull = () => {
+    /** Whether this page is in a turn of its own, which streams here and needs no reads. */
+    const inOwnTurn = () =>
+      turnsRef.current > 0 || agentRef.current.isRunning;
+
+    /** `live`: one read during a turn this page did not start, taking the answer's latest text. */
+    const pull = (live = false) => {
       const version = ++historyReadVersion.current;
       const isCurrent = () =>
         !cancelled && version === historyReadVersion.current;
       void (async () => {
         let sawReady = false;
-        for (const delayMs of [0, 750, 1500]) {
+        for (const delayMs of live ? [0] : [0, 750, 1500]) {
           if (delayMs > 0) {
             await new Promise((resolve) => setTimeout(resolve, delayMs));
           }
@@ -579,6 +611,7 @@ export function ChannelChat({
           if (stored.availability === "unavailable") {
             // Only an exhausted refresh with no successful read is a failure to announce. Keep the
             // last known ready notice when the store already answered this refresh cycle.
+            if (live) return;
             if (delayMs === 1500 && !sawReady) {
               setHistoryAvailability("unavailable");
               setHistoryReadFailed(true);
@@ -591,9 +624,12 @@ export function ChannelChat({
           setHistoryAvailability("ready");
           setHistoryReadFailed(false);
           const current = agentRef.current;
+          // A read that lands after this page started its own turn would overwrite what it streams.
+          if (live && inOwnTurn()) return;
           const messages = mergeStoredMessages(
             current.messages,
             stored.messages,
+            live,
           );
           if (messages === current.messages) continue;
           current.setMessages(messages);
@@ -602,13 +638,57 @@ export function ChannelChat({
       })();
     };
 
+    const summaryRow = () =>
+      queryClient
+        .getQueryData<{
+          pages: { channels: ChannelSummary[] }[];
+        }>(channelKeys.list())
+        ?.pages.flatMap((page) => page.channels)
+        .find((row) => row.id === channel.id);
+    /*
+     * A person's line that did not come from this page — a reply by iMessage or SMS — is shown as
+     * soon as it is on record, instead of with the Bot's answer. This page's own line needs no
+     * read: it is in a turn of its own then.
+     */
+    const personLine = () => {
+      const row = summaryRow();
+      return row && row.lastMessageAgentId === null && row.lastMessageAt
+        ? `${row.lastMessageAt}|${row.lastMessage ?? ""}`
+        : null;
+    };
+    let lastPersonLine = personLine();
+    /*
+     * While the channel is busy with a turn this page did not start, the answer is read every
+     * LIVE_READ_MS as the runner saves it, so it appears as it is written; once more at the end.
+     */
+    let liveReads: ReturnType<typeof setInterval> | undefined;
+    const followBusy = () => {
+      const following = summaryRow()?.busy === true && !inOwnTurn();
+      if (following && !liveReads) {
+        pull(true);
+        liveReads = setInterval(() => {
+          if (inOwnTurn()) return;
+          pull(true);
+        }, LIVE_READ_MS);
+      } else if (!following && liveReads) {
+        clearInterval(liveReads);
+        liveReads = undefined;
+        if (!inOwnTurn()) pull(true);
+      }
+    };
+
     const unsubscribe = queryClient.getQueryCache().subscribe(() => {
       const activity = authoredActivity();
       if (activity && !sameActivity(activity, lastSeen)) {
         lastSeen = activity;
-        if (sameActivity(selfReportedBotActivity.current, activity)) return;
-        pull();
+        if (!sameActivity(selfReportedBotActivity.current, activity)) pull();
       }
+      const line = personLine();
+      if (line !== lastPersonLine) {
+        lastPersonLine = line;
+        if (line && !inOwnTurn()) pull(true);
+      }
+      followBusy();
     });
     /*
      * A turn of this channel that outlived the chat it was started in, finished now. Its reply was stored and never
@@ -624,11 +704,14 @@ export function ChannelChat({
       ) {
         pull();
       }
+      // Opened while a turn from elsewhere is still writing: follow it from here.
+      if (!cancelled) followBusy();
     })();
     return () => {
       cancelled = true;
       unsubscribe();
       offFinishedAway();
+      if (liveReads) clearInterval(liveReads);
     };
   }, [channel.id, channel.threadId, joinGatePromise]);
 
