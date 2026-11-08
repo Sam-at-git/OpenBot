@@ -97,9 +97,8 @@ describe("the iMessage transport", () => {
     });
     expect(result).toEqual({ id: "m1", status: "sent" });
     expect(calls[0]?.url).toBe("http://bridge:8060/send");
-    expect(
-      (calls[0]?.init.headers as Record<string, string>).authorization,
-    ).toBe(`Bearer ${TOKEN}`);
+    const headers = calls[0]?.init.headers as Record<string, string> | undefined;
+    expect(headers?.authorization).toBe(`Bearer ${TOKEN}`);
     expect(JSON.parse(String(calls[0]?.init.body))).toEqual({
       to: "+8613510363575",
       text: "【CEO】Ready?",
@@ -128,7 +127,10 @@ describe("the iMessage transport", () => {
   });
 
   test("only the bridge's token is accepted inbound", () => {
-    const transport = createIMessageTransport({ url: "http://b", token: TOKEN });
+    const transport = createIMessageTransport({
+      url: "http://b",
+      token: TOKEN,
+    });
     expect(transport.verifyInbound(`Bearer ${TOKEN}`)).toBe(true);
     expect(transport.verifyInbound(`Bearer ${"x".repeat(40)}`)).toBe(false);
     expect(transport.verifyInbound(undefined)).toBe(false);

@@ -113,7 +113,10 @@ export function createIMessageTransport(
             "content-type": "application/json",
             authorization: `Bearer ${config.token}`,
           },
-          body: JSON.stringify({ to: address, text: iMessageText(text, sender) }),
+          body: JSON.stringify({
+            to: address,
+            text: iMessageText(text, sender),
+          }),
           signal: AbortSignal.timeout(45_000),
         });
       } catch {
@@ -122,7 +125,9 @@ export function createIMessageTransport(
       }
       if (!response.ok)
         throw new DeliveryProviderError("iMessage", String(response.status));
-      const body = (await response.json().catch(() => ({}))) as { id?: unknown };
+      const body = (await response.json().catch(() => ({}))) as {
+        id?: unknown;
+      };
       return {
         id: typeof body.id === "string" ? body.id : id,
         status: "sent",
@@ -130,7 +135,9 @@ export function createIMessageTransport(
     },
     verifyInbound(authorization) {
       const given = Buffer.from(authorization ?? "");
-      return given.length === expected.length && timingSafeEqual(given, expected);
+      return (
+        given.length === expected.length && timingSafeEqual(given, expected)
+      );
     },
   };
 }

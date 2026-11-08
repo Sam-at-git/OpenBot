@@ -4,12 +4,7 @@ import { client } from "@/lib/client";
 /** How loudly one Bot may reach the signed-in person. Badges on the web always show. */
 export type BotNotify = "all" | "needs_input" | "none";
 export type UpdateKind = "progress" | "decision" | "question";
-export type UpdateTransport =
-  | "slack"
-  | "teams"
-  | "sms"
-  | "imessage"
-  | "push";
+export type UpdateTransport = "slack" | "teams" | "sms" | "imessage" | "push";
 
 /** The signed-in person's relationship with one Bot. Never anybody else's. */
 export type BotLifecycle = {

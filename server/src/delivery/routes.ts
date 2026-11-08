@@ -3,12 +3,6 @@ import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
 import type { AppVariables } from "../auth/guards";
-import { createOpenTagTransport, type OpenTagTransport } from "./opentag";
-import {
-  handleOpenTagRun,
-  type OpenTagAgentDeps,
-  type PairedApprovals,
-} from "./opentag-agent";
 import {
   codeDigest,
   createIMessageTransport,
@@ -18,6 +12,12 @@ import {
   iMessageIdentity,
   pickIMessageBinding,
 } from "./imessage";
+import { createOpenTagTransport, type OpenTagTransport } from "./opentag";
+import {
+  handleOpenTagRun,
+  type OpenTagAgentDeps,
+  type PairedApprovals,
+} from "./opentag-agent";
 import { createExpoPushTransport } from "./push";
 import type { DeliveryRouter } from "./router";
 import type { DeliveryStore } from "./store";

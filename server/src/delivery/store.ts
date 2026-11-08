@@ -52,7 +52,11 @@ export function createDeliveryStore(database: Database) {
       );
     },
     /** Every live connection at one address: one phone following several Bots over iMessage. */
-    async bindingsAt(transport: BindingTransport, realm: string, address: string) {
+    async bindingsAt(
+      transport: BindingTransport,
+      realm: string,
+      address: string,
+    ) {
       return database
         .select()
         .from(deliveryBindings)
