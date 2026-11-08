@@ -7,7 +7,7 @@ import { client } from "./client";
 export type Reachability = {
   bindings: {
     id: string;
-    transport: "slack" | "teams" | "sms";
+    transport: "slack" | "teams" | "sms" | "imessage";
     channelId: string;
     agentId: string;
     address: string;
@@ -25,7 +25,13 @@ export type Reachability = {
     error: string | null;
     createdAt: string;
   }[];
-  available: { slack: boolean; teams: boolean; sms: boolean; push: boolean };
+  available: {
+    slack: boolean;
+    teams: boolean;
+    sms: boolean;
+    imessage: boolean;
+    push: boolean;
+  };
 };
 export const deliveryKey = ["delivery"] as const;
 export function deliveryQueryOptions() {
@@ -77,6 +83,25 @@ export function confirmSms(challengeId: string, code: string) {
     fallback: "Could not confirm this phone",
   });
 }
+/** A code sent to the phone by iMessage, through the bridge on the Mac. */
+export function startIMessage(target: {
+  channelId: string;
+  agentId: string;
+  phone: string;
+}) {
+  return client<string>("/api/delivery/imessage/start", "challengeId", {
+    method: "POST",
+    body: target,
+    fallback: "Could not send a code by iMessage",
+  });
+}
+export function confirmIMessage(challengeId: string, code: string) {
+  return client("/api/delivery/imessage/confirm", {
+    method: "POST",
+    body: { challengeId, code },
+    fallback: "Could not confirm this phone",
+  });
+}
 export function removeDeliveryBinding(id: string) {
   return client(`/api/delivery/bindings/${encodeURIComponent(id)}`, {
     method: "DELETE",
@@ -118,6 +143,23 @@ export function startChatLinkMutationOptions() {
  */
 export function startSmsMutationOptions() {
   return mutationOptions({ mutationFn: startSms });
+}
+
+export function startIMessageMutationOptions() {
+  return mutationOptions({ mutationFn: startIMessage });
+}
+
+export function confirmIMessageMutationOptions(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: ({
+      challengeId,
+      code,
+    }: {
+      challengeId: string;
+      code: string;
+    }) => confirmIMessage(challengeId, code),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: deliveryKey }),
+  });
 }
 
 export function confirmSmsMutationOptions(queryClient: QueryClient) {

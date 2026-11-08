@@ -41,6 +41,7 @@ const TRANSPORTS: { id: UpdateTransport; label: string }[] = [
   { id: "slack", label: "Slack" },
   { id: "teams", label: "Microsoft Teams" },
   { id: "sms", label: "SMS" },
+  { id: "imessage", label: "iMessage" },
 ];
 
 /**

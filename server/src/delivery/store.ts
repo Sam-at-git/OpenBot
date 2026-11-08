@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { agents } from "../db/schema/core";
 import { agentProfiles } from "../db/schema/coworker";
@@ -50,6 +50,32 @@ export function createDeliveryStore(database: Database) {
             .where(eq(deliveryBindings.id, id))
         )[0] ?? null
       );
+    },
+    /** Every live connection at one address: one phone following several Bots over iMessage. */
+    async bindingsAt(transport: BindingTransport, realm: string, address: string) {
+      return database
+        .select()
+        .from(deliveryBindings)
+        .where(
+          and(
+            eq(deliveryBindings.transport, transport),
+            eq(deliveryBindings.realm, realm),
+            eq(deliveryBindings.address, address),
+            eq(deliveryBindings.enabled, true),
+          ),
+        )
+        .orderBy(deliveryBindings.createdAt);
+    },
+    /** Which of these connections was written to last, if any was. */
+    async lastWrittenBinding(ids: string[]) {
+      if (ids.length === 0) return null;
+      const [row] = await database
+        .select({ bindingId: deliveryOutbox.bindingId })
+        .from(deliveryOutbox)
+        .where(inArray(deliveryOutbox.bindingId, ids))
+        .orderBy(desc(deliveryOutbox.createdAt))
+        .limit(1);
+      return row?.bindingId ?? null;
     },
     async findBinding(
       transport: BindingTransport,

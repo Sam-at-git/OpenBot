@@ -83,6 +83,7 @@ export function createDeliveryRouter(deps: {
     slack?: TextTransport;
     teams?: TextTransport;
     sms?: TextTransport;
+    imessage?: TextTransport;
     push?: ExpoPushTransport;
   };
   /** The person's routing by kind; defaults to the lifecycle lane's `resolveUpdateRoute`. */
@@ -179,22 +180,32 @@ export function createDeliveryRouter(deps: {
         });
   }
   async function receive(input: {
-    source: "sms";
+    source: "sms" | "imessage";
     realm: string;
     identity: string;
     address?: string;
     externalId: string;
     text: string;
     echo?: boolean;
+    /** The connection the caller already chose (iMessage: one phone, several Bots). */
+    bindingId?: string;
   }) {
     if (input.echo) return { queued: false };
-    const binding = await deps.store.findBinding(
-      input.source,
-      input.realm,
-      input.identity,
-      input.address,
-    );
-    if (!binding || !(await deps.authoriseScope(binding)))
+    const binding = input.bindingId
+      ? await deps.store.binding(input.bindingId)
+      : await deps.store.findBinding(
+          input.source,
+          input.realm,
+          input.identity,
+          input.address,
+        );
+    if (
+      !binding?.enabled ||
+      binding.transport !== input.source ||
+      binding.realm !== input.realm ||
+      binding.identity !== input.identity ||
+      !(await deps.authoriseScope(binding))
+    )
       return { queued: false };
     // Opted out by STOP: their texts start no turns until they send START.
     if (binding.optedOutAt) return { queued: false };

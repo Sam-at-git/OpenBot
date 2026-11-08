@@ -30,7 +30,12 @@ export class BotPausedError extends Error {
 
 export type BotNotify = "all" | "needs_input" | "none";
 export type UpdateKind = "progress" | "decision" | "question";
-export type UpdateTransport = "slack" | "teams" | "sms" | "push";
+export type UpdateTransport =
+  | "slack"
+  | "teams"
+  | "sms"
+  | "imessage"
+  | "push";
 export const UPDATE_KINDS: readonly UpdateKind[] = [
   "progress",
   "decision",
@@ -40,6 +45,7 @@ export const UPDATE_TRANSPORTS: readonly UpdateTransport[] = [
   "slack",
   "teams",
   "sms",
+  "imessage",
   "push",
 ];
 

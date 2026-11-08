@@ -3,6 +3,7 @@ import {
   IconBrandTeams,
   IconChevronRight,
   IconDeviceMobileMessage,
+  IconMessageCircle,
   IconSend,
 } from "@tabler/icons-react";
 import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
@@ -46,11 +47,13 @@ import { conversationLabel } from "@/lib/channels/label";
 import { channelListQueryOptions } from "@/lib/channels/queries";
 import {
   type ChatLink,
+  confirmIMessageMutationOptions,
   confirmSmsMutationOptions,
   deliveryQueryOptions,
   type Reachability,
   removeDeliveryBindingMutationOptions,
   startChatLinkMutationOptions,
+  startIMessageMutationOptions,
   startSmsMutationOptions,
 } from "@/lib/delivery";
 import { queryClient } from "@/query-client";
@@ -62,24 +65,31 @@ import { queryClient } from "@/query-client";
  * phone a moment after they may have looked away: leaving and coming back used to drop the box to
  * type it into, with no way to confirm the code they had just been sent.
  */
-const PENDING_SMS = "openbot.reachability.pendingSms";
-function readPending(): string {
+const PENDING: Record<PhoneTransport, string> = {
+  sms: "openbot.reachability.pendingSms",
+  imessage: "openbot.reachability.pendingIMessage",
+};
+function readPending(transport: PhoneTransport): string {
   try {
-    return sessionStorage.getItem(PENDING_SMS) ?? "";
+    return sessionStorage.getItem(PENDING[transport]) ?? "";
   } catch {
     return "";
   }
 }
-function writePending(id: string) {
+function writePending(transport: PhoneTransport, id: string) {
   try {
-    if (id) sessionStorage.setItem(PENDING_SMS, id);
-    else sessionStorage.removeItem(PENDING_SMS);
+    if (id) sessionStorage.setItem(PENDING[transport], id);
+    else sessionStorage.removeItem(PENDING[transport]);
   } catch {
     /* A browser that keeps nothing still confirms within the visit. */
   }
 }
 
 type Transport = Reachability["bindings"][number]["transport"];
+/** The transports connected by verifying a phone with a code, rather than by a link message. */
+type PhoneTransport = "sms" | "imessage";
+const isPhone = (transport: Transport): transport is PhoneTransport =>
+  transport === "sms" || transport === "imessage";
 type ChatPlatform = ChatLink["platform"];
 
 /** A one-time link message, the conversation and Bot it links, and when it stops working. */
@@ -108,6 +118,12 @@ const TRANSPORT: Record<
     icon: IconDeviceMobileMessage,
     summary: "Continue a conversation by text message.",
   },
+  imessage: {
+    link: "Connect iMessage",
+    icon: IconMessageCircle,
+    summary:
+      "Continue a conversation in iMessage. Messages start with the Bot's name.",
+  },
 };
 
 /**
@@ -124,8 +140,15 @@ export function ReachingYou({ agentId: fixedBot }: { agentId?: string }) {
   // People read Bots by name; the id is what the list used to show.
   const botName = (id: string) =>
     bots.data?.find((bot) => bot.id === id)?.name ?? id;
-  const [challengeId, setChallengeId] = useState(readPending);
-  useEffect(() => writePending(challengeId), [challengeId]);
+  const [challenges, setChallenges] = useState<Record<PhoneTransport, string>>(
+    () => ({ sms: readPending("sms"), imessage: readPending("imessage") }),
+  );
+  useEffect(() => {
+    writePending("sms", challenges.sms);
+    writePending("imessage", challenges.imessage);
+  }, [challenges]);
+  const challengeFor = (transport: Transport) =>
+    isPhone(transport) ? challenges[transport] : "";
   const [connecting, setConnecting] = useState<Transport | null>(null);
   /*
    * The last link message per platform, held here rather than in the dialog: the dialog unmounts
@@ -136,7 +159,7 @@ export function ReachingYou({ agentId: fixedBot }: { agentId?: string }) {
     {},
   );
   const heldLink = (transport: Transport) => {
-    if (transport === "sms") return undefined;
+    if (isPhone(transport)) return undefined;
     const held = links[transport];
     return held && held.expiresAt > Date.now() ? held : undefined;
   };
@@ -153,19 +176,20 @@ export function ReachingYou({ agentId: fixedBot }: { agentId?: string }) {
    * so the code can still be confirmed.
    */
   const open = (transport: Transport) =>
-    !!reach.data?.available[transport] ||
-    (transport === "sms" && challengeId !== "");
+    !!reach.data?.available[transport] || challengeFor(transport) !== "";
   const summary = (transport: Transport) => {
-    if (transport === "sms" && challengeId) {
+    if (challengeFor(transport)) {
       return "A verification code is on its way. Enter it to finish.";
     }
     if (heldLink(transport)) {
       return "Your link code is ready to send. Open this to see it again.";
     }
     if (open(transport)) return TRANSPORT[transport].summary;
-    return transport === "sms"
-      ? "Text messages aren't set up yet. An admin has to turn them on first."
-      : "Not set up yet. An admin has to turn on Slack and Teams first.";
+    if (transport === "sms")
+      return "Text messages aren't set up yet. An admin has to turn them on first.";
+    if (transport === "imessage")
+      return "iMessage isn't set up yet. An admin has to connect the Mac bridge first.";
+    return "Not set up yet. An admin has to turn on Slack and Teams first.";
   };
 
   return (
@@ -280,10 +304,14 @@ export function ReachingYou({ agentId: fixedBot }: { agentId?: string }) {
         <ConnectDialog
           available={reach.data.available}
           botName={botName}
-          challengeId={challengeId}
+          challengeId={challengeFor(connecting)}
           fixedBot={fixedBot}
           linked={heldLink(connecting)}
-          onChallenge={setChallengeId}
+          onChallenge={(id) => {
+            const transport = connecting;
+            if (isPhone(transport))
+              setChallenges((prior) => ({ ...prior, [transport]: id }));
+          }}
           onClose={() => setConnecting(null)}
           onLinked={(link) =>
             setLinks((prior) => ({ ...prior, [link.platform]: link }))
@@ -332,8 +360,16 @@ function ConnectDialog({
   const [code, setCode] = useState("");
   const [copied, setCopied] = useState(false);
   const link = useMutation(startChatLinkMutationOptions());
-  const sms = useMutation(startSmsMutationOptions());
-  const confirm = useMutation(confirmSmsMutationOptions(queryClient));
+  const sms = useMutation(
+    transport === "imessage"
+      ? startIMessageMutationOptions()
+      : startSmsMutationOptions(),
+  );
+  const confirm = useMutation(
+    transport === "imessage"
+      ? confirmIMessageMutationOptions(queryClient)
+      : confirmSmsMutationOptions(queryClient),
+  );
   const startLink = (platform: ChatPlatform) =>
     link.mutate(
       { channelId, agentId, platform },
@@ -434,7 +470,7 @@ function ConnectDialog({
               Load more conversations
             </Button>
           ) : null}
-          {transport === "sms" ? (
+          {isPhone(transport) ? (
             <>
               <form
                 onSubmit={(event) => {
@@ -454,13 +490,19 @@ function ConnectDialog({
                       id={`${formId}-phone`}
                       onChange={(event) => setPhone(event.target.value)}
                       pattern="\+[1-9][0-9]{7,14}"
-                      placeholder="+15551234567"
+                      placeholder={
+                        transport === "imessage"
+                          ? "+8613500000000"
+                          : "+15551234567"
+                      }
                       required
                       type="tel"
                       value={phone}
                     />
                     <Button
-                      disabled={!chosen || !available.sms || sms.isPending}
+                      disabled={
+                        !chosen || !available[transport] || sms.isPending
+                      }
                       size="sm"
                       type="submit"
                       variant={challengeId ? "outline" : "default"}
@@ -548,7 +590,7 @@ function ConnectDialog({
             Close
           </Button>
           {/* A phone's two steps each submit their own field, beside it. */}
-          {transport === "sms" ? null : (
+          {isPhone(transport) ? null : (
             <Button
               disabled={!chosen || !available[transport] || link.isPending}
               onClick={() => startLink(transport)}

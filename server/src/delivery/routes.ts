@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
@@ -9,6 +9,15 @@ import {
   type OpenTagAgentDeps,
   type PairedApprovals,
 } from "./opentag-agent";
+import {
+  codeDigest,
+  createIMessageTransport,
+  IMESSAGE_REALM,
+  type IMessageTransport,
+  iMessageHandle,
+  iMessageIdentity,
+  pickIMessageBinding,
+} from "./imessage";
 import { createExpoPushTransport } from "./push";
 import type { DeliveryRouter } from "./router";
 import type { DeliveryStore } from "./store";
@@ -86,6 +95,8 @@ export function createDeliveryRoutes(deps: {
   /** The OpenTag pairing. Named `slack` for the existing assembly; it serves Slack and Teams. */
   slack?: OpenTagTransport;
   twilio?: TwilioTransport;
+  /** iMessage through the bridge on a Mac (imessage-bridge/). */
+  imessage?: IMessageTransport;
   pushProjectId?: string;
 }) {
   const routes = new Hono<{ Variables: AppVariables }>();
@@ -102,6 +113,7 @@ export function createDeliveryRoutes(deps: {
         slack: Boolean(deps.slack),
         teams: Boolean(deps.slack),
         sms: Boolean(deps.twilio),
+        imessage: Boolean(deps.imessage),
         push: Boolean(deps.pushProjectId),
       },
     }),
@@ -196,6 +208,105 @@ export function createDeliveryRoutes(deps: {
       201,
     );
   });
+  /*
+   * iMessage: OpenBot sends a code to the phone through the bridge, and the person types it back
+   * here. The code is kept only as a digest, in this process, for ten minutes and five tries: a
+   * restart asks for a new code, which costs one more message.
+   */
+  const iMessageCodes = new Map<
+    string,
+    { digest: string; expires: number; tries: number }
+  >();
+  routes.post("/imessage/start", async (c) => {
+    if (!deps.imessage)
+      throw new DeliveryRefusedError(
+        "iMessage is not configured on this deployment.",
+      );
+    const target = targetSchema
+      .extend({ phone: z.string().min(3).max(320) })
+      .parse(await c.req.json());
+    const handle = iMessageHandle(target.phone);
+    if (!handle)
+      throw new DeliveryRefusedError(
+        "Enter a phone number with its country code, like +8613500000000, or an email address.",
+      );
+    const scope = await ownedScope(deps.scopeFor, c.var.actor.id, target);
+    const challengeId = await deps.store.challenge(scope, "imessage", handle);
+    const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
+    for (const [id, held] of iMessageCodes)
+      if (held.expires < Date.now()) iMessageCodes.delete(id);
+    iMessageCodes.set(challengeId, {
+      digest: codeDigest(challengeId, code),
+      expires: Date.now() + 10 * 60_000,
+      tries: 0,
+    });
+    try {
+      await deps.imessage.send({
+        id: challengeId,
+        address: handle,
+        text: `OpenBot code: ${code}. It expires in 10 minutes.`,
+      });
+    } catch {
+      iMessageCodes.delete(challengeId);
+      throw new DeliveryRefusedError(
+        "The code could not be sent by iMessage. Check the number, and that it is on the bridge's allowed list.",
+      );
+    }
+    return c.json({ challengeId });
+  });
+  routes.post("/imessage/confirm", async (c) => {
+    if (!deps.imessage)
+      throw new DeliveryRefusedError(
+        "iMessage is not configured on this deployment.",
+      );
+    const input = z
+      .strictObject({
+        challengeId: z.string().uuid(),
+        code: z.string().regex(/^\d{4,10}$/),
+      })
+      .parse(await c.req.json());
+    const challenge = await deps.store.readChallenge(
+      input.challengeId,
+      c.var.actor.id,
+    );
+    const held = iMessageCodes.get(input.challengeId);
+    if (
+      challenge?.transport !== "imessage" ||
+      !challenge.address ||
+      !held ||
+      held.expires < Date.now()
+    )
+      throw new DeliveryRefusedError(
+        "This code expired or was already used. Send a new one.",
+      );
+    held.tries += 1;
+    if (held.tries > 5) {
+      iMessageCodes.delete(input.challengeId);
+      throw new DeliveryRefusedError("Too many tries. Send a new code.");
+    }
+    if (held.digest !== codeDigest(input.challengeId, input.code))
+      throw new DeliveryRefusedError("That code is not right.");
+    const scope = await ownedScope(deps.scopeFor, c.var.actor.id, challenge);
+    if (scope.threadId !== challenge.threadId)
+      throw new DeliveryRefusedError(
+        "The conversation changed. Send a new code.",
+      );
+    if (!(await deps.store.consumeChallenge(challenge.id, c.var.actor.id)))
+      throw new DeliveryRefusedError("This code was already used.");
+    iMessageCodes.delete(input.challengeId);
+    return c.json(
+      {
+        binding: await deps.store.bind({
+          ...scope,
+          transport: "imessage",
+          identity: iMessageIdentity(challenge.address, scope.agentId),
+          realm: IMESSAGE_REALM,
+          address: challenge.address,
+        }),
+      },
+      201,
+    );
+  });
   routes.post("/devices", async (c) => {
     if (!deps.pushProjectId)
       throw new DeliveryRefusedError(
@@ -272,11 +383,15 @@ export function createDeliveryWebhookRoutes(deps: {
     | "updateSmsStatus"
     | "findBinding"
     | "botIdentity"
+    | "bindingsAt"
+    | "lastWrittenBinding"
   >;
   scopeFor: DeliveryScopeResolver;
   /** The OpenTag pairing. Named `slack` for the existing assembly; it serves Slack and Teams. */
   slack?: OpenTagTransport;
   twilio?: TwilioTransport;
+  /** iMessage through the bridge on a Mac (imessage-bridge/). */
+  imessage?: IMessageTransport;
   /** Lets a Slack/Teams card decide an approval and a chat reply answer a Bot's question. */
   approvals?: PairedApprovals;
   /** Test seam; production uses the responsibilities lane's `ingestSlackEvent`. */
@@ -310,6 +425,57 @@ export function createDeliveryWebhookRoutes(deps: {
         c.req.raw,
       ),
     );
+  }
+  if (deps.imessage) {
+    const imessage = deps.imessage;
+    /*
+     * A message from the phone, posted by the bridge. The bridge only forwards the handles it allows,
+     * and this only takes it with the bridge's token. It goes to the Bot it names, or to the one
+     * that wrote last (`pickIMessageBinding`).
+     */
+    routes.post("/imessage", async (c) => {
+      if (!imessage.verifyInbound(c.req.header("authorization")))
+        return c.json({ error: "Invalid bridge token." }, 401);
+      const input = z
+        .object({
+          id: z.string().min(1).max(200),
+          handle: z.string().min(3).max(320),
+          text: z.string().min(1).max(8_000),
+        })
+        .parse(await c.req.json());
+      const handle = iMessageHandle(input.handle);
+      if (!handle) return c.json({ queued: false, reason: "unknown" });
+      const bindings = await deps.store.bindingsAt(
+        "imessage",
+        IMESSAGE_REALM,
+        handle,
+      );
+      if (bindings.length === 0)
+        return c.json({ queued: false, reason: "unbound" });
+      const names = new Map<string, string>();
+      for (const binding of bindings) {
+        const bot = await deps.store.botIdentity(binding.agentId);
+        if (bot?.name) names.set(binding.agentId, bot.name);
+      }
+      const picked = pickIMessageBinding(
+        bindings,
+        input.text,
+        (agentId) => names.get(agentId),
+        await deps.store.lastWrittenBinding(bindings.map((b) => b.id)),
+      );
+      if (!picked.binding) return c.json({ queued: false, reason: "unbound" });
+      return c.json(
+        await deps.router.receive({
+          source: "imessage",
+          realm: IMESSAGE_REALM,
+          identity: picked.binding.identity,
+          address: handle,
+          externalId: input.id,
+          text: picked.text,
+          bindingId: picked.binding.id,
+        }),
+      );
+    });
   }
   if (deps.twilio) {
     const twilio = deps.twilio;
@@ -446,6 +612,14 @@ export function configuredDeliveryProviders(
     "TWILIO_VERIFY_SERVICE_SID",
     "TWILIO_FROM_NUMBER",
   ]);
+  const imessageValues = configured([
+    "IMESSAGE_BRIDGE_URL",
+    "IMESSAGE_BRIDGE_TOKEN",
+  ]);
+  if (imessageValues && !/^https?:\/\//.test(imessageValues[0] ?? ""))
+    throw new Error("IMESSAGE_BRIDGE_URL must be an http(s) URL.");
+  if (imessageValues && (imessageValues[1] ?? "").length < 32)
+    throw new Error("IMESSAGE_BRIDGE_TOKEN must be at least 32 characters.");
   const pushProjectId = env.EXPO_PROJECT_ID?.trim();
   if (pushProjectId && !z.uuid().safeParse(pushProjectId).success)
     throw new Error(
@@ -463,6 +637,12 @@ export function configuredDeliveryProviders(
           from: smsValues[3] ?? "",
           webhookUrl: `${base}/api/delivery/webhooks/sms`,
           statusUrl: `${base}/api/delivery/webhooks/sms/status`,
+        })
+      : undefined,
+    imessage: imessageValues
+      ? createIMessageTransport({
+          url: imessageValues[0] ?? "",
+          token: imessageValues[1] ?? "",
         })
       : undefined,
     push: pushProjectId

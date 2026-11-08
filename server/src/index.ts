@@ -3099,6 +3099,7 @@ const app = createApp(
           }),
         slack: deliveryProviders.slack,
         twilio: deliveryProviders.sms,
+        imessage: deliveryProviders.imessage,
         pushProjectId: deliveryProviders.pushProjectId,
       },
       webhooks: {
@@ -3108,6 +3109,7 @@ const app = createApp(
         scopeFor: deliveryScopeFor,
         slack: deliveryProviders.slack,
         twilio: deliveryProviders.sms,
+        imessage: deliveryProviders.imessage,
         identity: slackCodeRedeemer(identityStore, bootAuditStore),
       },
     },

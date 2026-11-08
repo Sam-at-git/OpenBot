@@ -6,7 +6,7 @@ export type DeliveryScope = {
 };
 /** Chat platforms reached through the OpenTag pairing (Channels SDK front for Slack and Teams). */
 export type ChatTransport = "slack" | "teams";
-export type BindingTransport = ChatTransport | "sms";
+export type BindingTransport = ChatTransport | "sms" | "imessage";
 export type DeliveryBinding = DeliveryScope & {
   id: string;
   transport: BindingTransport;
