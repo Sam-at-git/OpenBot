@@ -1,5 +1,8 @@
 import { expect, test } from "bun:test";
-import { createDeliveryRouter } from "../src/delivery/router";
+import {
+  createDeliveryRouter,
+  TURN_FAILED_NOTICE,
+} from "../src/delivery/router";
 import {
   type DeliveryBinding,
   type DeliveryInbox,
@@ -423,4 +426,39 @@ test("the person's update routing decides which transports carry each kind", asy
       return `${r.kind}:${r.transport}`;
     }),
   ).toEqual(["reply:push", "question:slack"]);
+});
+test("a queued turn that fails tells the phone; one that stopped to ask a question does not", async () => {
+  for (const [error, told] of [
+    [new Error("The operation was aborted."), true],
+    [
+      Object.assign(new Error("waiting"), { name: "HeadlessToolSuspension" }),
+      false,
+    ],
+  ] as const) {
+    const f = fixture();
+    const router = createDeliveryRouter({
+      store: f.store,
+      queue: f.queue,
+      owner: "w",
+      authoriseScope: async () => true,
+      runTurn: async () => {
+        throw error;
+      },
+      providers: {},
+    });
+    await router.sweep("delivery.inbound").catch(() => undefined);
+    expect(f.statuses).toContainEqual(
+      expect.objectContaining({ state: "failed" }),
+    );
+    const notices = f.offered.filter(
+      (row) => (row as { text?: string }).text === TURN_FAILED_NOTICE,
+    );
+    expect(notices).toHaveLength(told ? 1 : 0);
+    if (told)
+      expect(notices[0]).toMatchObject({
+        bindingId: "binding",
+        kind: "reply",
+        dedupeKey: "reply:in:failed:binding:binding",
+      });
+  }
 });

@@ -37,6 +37,9 @@ export type ConverseResult =
     };
 /** Twilio error 21610: the recipient has opted out, so Twilio refuses the send. */
 const TWILIO_UNSUBSCRIBED = "21610";
+/** Sent to the phone when a turn it started ends without an answer. */
+export const TURN_FAILED_NOTICE =
+  "Couldn't finish an answer to this. Open the conversation in OpenBot to see how far it got, or ask again.";
 export type DeliveryWorkKind =
   | "delivery.inbound"
   | "delivery.outbound"
@@ -422,6 +425,16 @@ export function createDeliveryRouter(deps: {
             ? error.message
             : "The agent turn failed. Inspect the conversation before retrying.",
         );
+        // Without this the phone hears nothing at all. A Bot that stopped to ask a question has
+        // already sent that question, and a refused scope must not be written to.
+        const suspended =
+          error instanceof Error && error.name === "HeadlessToolSuspension";
+        if (!suspended && !(error instanceof DeliveryRefusedError))
+          await notify(row, {
+            id: `${row.id}:failed`,
+            text: TURN_FAILED_NOTICE,
+            kind: "reply",
+          }).catch(() => undefined);
         throw error;
       }
       return;

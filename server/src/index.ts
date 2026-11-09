@@ -2276,7 +2276,7 @@ const executeApprovedAction = createApprovedActionExecutor({
   refusalMarker: REFUSAL_MARKER,
   personInitiator: PERSON_INITIATOR,
 });
-const approvalContinuationRunner = createTurnRunner({
+const continuationRunnerOptions: Parameters<typeof createTurnRunner>[0] = {
   admission: serverTurnAdmission,
   intelligence: routineIntelligence,
   runner: routineAgentRunner,
@@ -2287,6 +2287,17 @@ const approvalContinuationRunner = createTurnRunner({
   learningContainerForThread: (input) =>
     copilotRuntime.learning?.containerForThread(input) ??
     Promise.resolve(undefined),
+};
+const approvalContinuationRunner = createTurnRunner(continuationRunnerOptions);
+/**
+ * A person writing from their phone (iMessage, SMS, Slack) is in a conversation, like the browser,
+ * and a question that needs the Bot's computer can take many browser steps on a local model. Five
+ * minutes, the routine limit, cut those off before an answer.
+ */
+const DELIVERY_TURN_TIMEOUT_MS = 15 * 60_000;
+const deliveryTurnRunner = createTurnRunner({
+  ...continuationRunnerOptions,
+  turnTimeoutMs: DELIVERY_TURN_TIMEOUT_MS,
 });
 /**
  * Conversations with several Bots. Each Bot turn is an ordinary headless AG-UI turn into that Bot's
@@ -2412,7 +2423,7 @@ const deliveryRouter = createDeliveryRouter({
     );
     await channelStore.signalBusy(input.threadId, true);
     try {
-      const result = await approvalContinuationRunner({
+      const result = await deliveryTurnRunner({
         ownerUserId: input.ownerUserId,
         routineId: `delivery:${input.runId}`,
         runId: input.runId,
