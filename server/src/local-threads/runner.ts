@@ -37,7 +37,6 @@ import type {
   RunStartedEvent,
 } from "@ag-ui/client";
 import { compactEvents, EventType } from "@ag-ui/client";
-import { FOLLOWING_LIVE_RUN_EVENT } from "@openbot/shared/live-run";
 import type {
   AgentRunnerConnectRequest,
   AgentRunnerIsRunningRequest,
@@ -53,6 +52,7 @@ import {
   ThreadAlreadyRunningError,
   ɵresolveThreadOwner,
 } from "@copilotkit/runtime/v2";
+import { FOLLOWING_LIVE_RUN_EVENT } from "@openbot/shared/live-run";
 import type { Observable } from "rxjs";
 import { ReplaySubject } from "rxjs";
 import {

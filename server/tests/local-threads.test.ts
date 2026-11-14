@@ -9,8 +9,8 @@ import {
   type Message,
   type RunAgentInput,
 } from "@ag-ui/client";
-import { Observable } from "rxjs";
 import { FOLLOWING_LIVE_RUN_EVENT } from "@openbot/shared/live-run";
+import { Observable } from "rxjs";
 import { loadConfig } from "../src/config";
 import { createLocalThreadsClient } from "../src/local-threads/client";
 import {

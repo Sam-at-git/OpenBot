@@ -6,6 +6,7 @@ import {
   useAgent,
   useCopilotKit,
 } from "@copilotkit/react-core/v2";
+import { FOLLOWING_LIVE_RUN_EVENT } from "@openbot/shared/live-run";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChannelWorkRows } from "@/components/channels/channel-work";
@@ -40,7 +41,6 @@ import { ConversationProvider } from "@/lib/copilot/conversation";
 import { afterMs, joinWithin } from "@/lib/copilot/join-thread";
 import { repairUnansweredToolCalls } from "@/lib/copilot/repair-history";
 import { refusedAsBusy, stoppedReason } from "@/lib/copilot/stopped-turn";
-import { FOLLOWING_LIVE_RUN_EVENT } from "@openbot/shared/live-run";
 import { readThreadPage } from "@/lib/copilot/thread-messages";
 import { TurnUsageProvider, useTurnUsage } from "@/lib/copilot/turn-usage";
 import { useSkillCommands } from "@/lib/plugins/skill-commands";
