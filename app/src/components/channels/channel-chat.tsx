@@ -40,6 +40,7 @@ import { ConversationProvider } from "@/lib/copilot/conversation";
 import { afterMs, joinWithin } from "@/lib/copilot/join-thread";
 import { repairUnansweredToolCalls } from "@/lib/copilot/repair-history";
 import { refusedAsBusy, stoppedReason } from "@/lib/copilot/stopped-turn";
+import { FOLLOWING_LIVE_RUN_EVENT } from "@openbot/shared/live-run";
 import { readThreadPage } from "@/lib/copilot/thread-messages";
 import { TurnUsageProvider, useTurnUsage } from "@/lib/copilot/turn-usage";
 import { useSkillCommands } from "@/lib/plugins/skill-commands";
@@ -488,13 +489,32 @@ export function ChannelChat({
       };
     }
 
+    /*
+     * Whether this join caught up with a run still going on the server. Then the connect stays open until the run
+     * ends, the Bot shows as working, and anything typed meanwhile is queued (`shared/live-run.ts`).
+     */
+    let following = false;
+    let joining = true;
+    const watch = agent.subscribe?.({
+      onCustomEvent: ({ event }) => {
+        if (event.name === FOLLOWING_LIVE_RUN_EVENT) following = true;
+      },
+    });
+
     void (async () => {
       try {
+        const connect = copilotkit.connectAgent({ agent });
+        void connect
+          .catch(() => undefined)
+          .finally(() => {
+            joining = false;
+          });
         // Bounded, and finished when it returns; `join-thread.ts` has why that matters.
         await joinWithin({
-          connect: copilotkit.connectAgent({ agent }),
+          connect,
           deadline: afterMs(JOIN_DEADLINE_MS),
           detach: () => agent.detachActiveRun(),
+          following: () => following,
         });
       } catch {
         /*
@@ -541,6 +561,13 @@ export function ChannelChat({
 
     return () => {
       current = false;
+      watch?.unsubscribe();
+      /*
+       * A connect still following a live run belongs to this mount, so it ends with it. Left open, the next mount's
+       * connect would run beside it on the same agent. Only while it is still open: after it ends, the active run is
+       * a turn this screen started, and that goes on without the screen.
+       */
+      if (following && joining) void agent.detachActiveRun();
     };
   }, [copilotkit, agent, isReady, channel.threadId]);
 

@@ -36,6 +36,27 @@ describe("joinWithin", () => {
     expect(detached).toBe(0);
   });
 
+  test("leaves a connect that is following a live run attached", async () => {
+    const connect = deferred();
+    const deadline = deferred();
+    let detached = 0;
+
+    const joined = joinWithin({
+      connect: connect.promise,
+      deadline: deadline.promise,
+      detach: async () => {
+        detached += 1;
+      },
+      following: () => true,
+    });
+
+    deadline.resolve();
+    // Over without the connect ending: it ends when the Bot's run does.
+    await joined;
+
+    expect(detached).toBe(0);
+  });
+
   test("ends the connect when the deadline passes first", async () => {
     const connect = deferred();
     const deadline = deferred();

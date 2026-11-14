@@ -10,6 +10,7 @@ export async function joinWithin({
   connect,
   deadline,
   detach,
+  following = () => false,
 }: {
   /** The join already in progress. Its rejection is an outcome, not a failure of this function. */
   connect: Promise<unknown>;
@@ -17,6 +18,11 @@ export async function joinWithin({
   deadline: Promise<void>;
   /** End the in-flight connect. Asked for once, and only when the deadline came first. */
   detach: () => Promise<unknown>;
+  /**
+   * Whether the connect has caught up with a run still going on the server and is following it live
+   * (`shared/live-run.ts`). Asked once, at the deadline.
+   */
+  following?: () => boolean;
 }): Promise<void> {
   // Settled either way: a connect that failed is a join that is over, and the caller restores
   // history separately. Kept as one promise so it can be awaited twice without a second rejection.
@@ -30,6 +36,16 @@ export async function joinWithin({
     deadline.then(() => "deadline" as const),
   ]);
   if (outcome === "connected") {
+    return;
+  }
+  /*
+   * NOT STUCK, STILL GOING: the connect is open because the Bot is still working, and it ends when the Bot does. It is
+   * left attached and the join is over. Ending it would tell the screen the Bot is idle, and the next message would be
+   * sent into the running turn and refused. Attached, the agent reports itself running, so a message typed now waits
+   * in the queue and goes when the run ends. Nothing can start a run on top of it to be overwritten by it, because
+   * the server refuses a second run on the conversation.
+   */
+  if (following()) {
     return;
   }
 

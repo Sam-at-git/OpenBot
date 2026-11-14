@@ -10,6 +10,7 @@ import {
   type RunAgentInput,
 } from "@ag-ui/client";
 import { Observable } from "rxjs";
+import { FOLLOWING_LIVE_RUN_EVENT } from "@openbot/shared/live-run";
 import { loadConfig } from "../src/config";
 import { createLocalThreadsClient } from "../src/local-threads/client";
 import {
@@ -529,6 +530,47 @@ describe("local conversations: nothing a person sent is lost", () => {
     expect(
       replayed.filter((e) => e.type === EventType.TEXT_MESSAGE_CONTENT),
     ).toHaveLength(1);
+  });
+
+  test("a browser reconnecting mid-run is told it is following a live run, once, inside the run", async () => {
+    const runner = new LocalAgentRunner({ dbPath: ":memory:" });
+    startHanging(runner, "t1", [user("Hello.", "u1")], "Hi");
+    await Bun.sleep(1_200);
+    const replayed: BaseEvent[] = [];
+    const subscription = runner
+      .connect({ threadId: "t1", ownerId: "alice" })
+      .subscribe({ next: (e) => replayed.push(e) });
+    await Bun.sleep(20);
+    subscription.unsubscribe();
+    const marks = replayed
+      .map((e, index) => ({ e, index }))
+      .filter(
+        ({ e }) =>
+          e.type === EventType.CUSTOM &&
+          (e as { name?: string }).name === FOLLOWING_LIVE_RUN_EVENT,
+      );
+    expect(marks).toHaveLength(1);
+    // After the live run's RUN_STARTED, where the event verifier accepts a CUSTOM event.
+    expect(replayed[(marks[0]?.index ?? 0) - 1]?.type).toBe(
+      EventType.RUN_STARTED,
+    );
+  });
+
+  test("a finished conversation's replay does not say so", async () => {
+    const runner = new LocalAgentRunner({ dbPath: ":memory:" });
+    await runTurn(runner, {
+      threadId: "t1",
+      ownerId: "alice",
+      messages: [user("Hello.", "u1")],
+      reply: "Hi.",
+    });
+    const replayed: BaseEvent[] = [];
+    await new Promise<void>((resolve) =>
+      runner
+        .connect({ threadId: "t1", ownerId: "alice" })
+        .subscribe({ next: (e) => replayed.push(e), complete: resolve }),
+    );
+    expect(JSON.stringify(replayed)).not.toContain(FOLLOWING_LIVE_RUN_EVENT);
   });
 });
 

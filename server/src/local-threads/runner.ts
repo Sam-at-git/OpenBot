@@ -37,6 +37,7 @@ import type {
   RunStartedEvent,
 } from "@ag-ui/client";
 import { compactEvents, EventType } from "@ag-ui/client";
+import { FOLLOWING_LIVE_RUN_EVENT } from "@openbot/shared/live-run";
 import type {
   AgentRunnerConnectRequest,
   AgentRunnerIsRunningRequest,
@@ -1001,10 +1002,9 @@ export class LocalAgentRunner extends AgentRunner {
         emitted.add(event.messageId);
     }
     const active = this.activeConnections.get(request.threadId);
-    if (
-      active &&
-      (this.getRunState(request.threadId).isRunning || active.stopRequested)
-    ) {
+    const state = this.getRunState(request.threadId);
+    if (active && (state.isRunning || active.stopRequested)) {
+      let announced = false;
       active.subject.subscribe({
         next: (event) => {
           if (
@@ -1014,6 +1014,15 @@ export class LocalAgentRunner extends AgentRunner {
           )
             return;
           subject.next(event);
+          // So the browser keeps this connection open rather than ending it as a stuck join (shared/live-run.ts).
+          if (!announced && event.type === EventType.RUN_STARTED) {
+            announced = true;
+            subject.next({
+              type: EventType.CUSTOM,
+              name: FOLLOWING_LIVE_RUN_EVENT,
+              value: { runId: state.currentRunId },
+            } as BaseEvent);
+          }
         },
         complete: () => subject.complete(),
         error: (error) => subject.error(error),
