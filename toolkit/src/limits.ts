@@ -6,8 +6,14 @@
  * everything behind them into that process.
  */
 export const TURN_LIMITS = {
-  /** How long one headless turn may take before it is stopped. */
-  turnTimeoutMs: 5 * 60_000,
+  /**
+   * How long one headless turn may take before it is stopped.
+   *
+   * Fifteen minutes, as phone turns already had. A local model rereads a 40k-token conversation in about two minutes
+   * before it says anything, and a turn is every step together: at five minutes, two routines on the Mac Studio were
+   * stopped part way through, one after a single tool call (2026-11-14).
+   */
+  turnTimeoutMs: 15 * 60_000,
 
   /**
    * The gap between stopping a turn and giving up on it.
