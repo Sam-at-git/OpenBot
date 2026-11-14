@@ -10,9 +10,13 @@ import { HumanMessage } from "@langchain/core/messages";
  * stored or shown.
  */
 
-/** Asking the person something is a reason to stop, not a stall. */
+/**
+ * Asking the person something is a reason to stop, not a stall.
+ *
+ * Not a bare 确认: "我先确认这三条接口可用" is the Bot checking, not asking (2026-11-14).
+ */
 const ASKS_THE_PERSON =
-  /[?？]\s*$|确认|请问|是否|要不要|需不需要|需要你|请你|告诉我|你来|你决定|shall i|should i|do you want|would you like|let me know|confirm/i;
+  /[?？]\s*[)）」"”]*\s*$|请确认|需要你确认|待你确认|你确认|请问|是否|要不要|需不需要|需要你|请你|告诉我|你来|你决定|由你|shall i|should i|do you want|would you like|let me know|(?:please|can you|could you) confirm/i;
 
 const ANNOUNCES_A_STEP = [
   /(现在|接下来|下一步|然后|马上|随后|我先|我来|我将|我会|我要|让我|准备|开始|先)[^。！!\n]{0,40}(点击|点开|打开|填写|填入|输入|选择|选中|切换|搜索|查找|获取|拿到|查看|读取|保存|提交|滚动|等待|截图|快照|执行|调用|操作|检查|核对|导航|进入|返回|刷新|登录|下载|上传|运行|尝试|处理)/,
@@ -49,8 +53,24 @@ export function announcesNextStep(text: string): boolean {
   );
 }
 
-/** How many times one run may be asked to go on. One is enough to unstick it and cannot loop. */
-export const NUDGES_PER_RUN = 1;
+/**
+ * A text-only reply this short, straight after a tool result, is a step said aloud rather than a report.
+ *
+ * Listing the words a stall uses kept missing new ones: "重写助手，完整取数。", "落盘记录。", "现在查权限清单…",
+ * "my snippet just forgot the import." (all 2026-11-14). What they share is their shape: a tool has just answered,
+ * the Bot writes a line, asks nothing, and stops. A finished task ends with a report, a table or a question. When
+ * this misfires the cost is one more model call, and the note tells the Bot to say it is done and stop.
+ */
+const SHORT_REPLY_CHARS = 200;
+
+export function stopsShortAfterTool(text: string): boolean {
+  const reply = text.trim();
+  if (!reply || reply.length > SHORT_REPLY_CHARS) return false;
+  return !ASKS_THE_PERSON.test(reply);
+}
+
+/** How many times one run may be asked to go on. Bounded, so it cannot loop. */
+export const NUDGES_PER_RUN = 2;
 
 export const NUDGE_TEXT =
   "(Note from OpenBot, not from the person.) Your last reply said what you would do next but did not call a tool, so nothing happened. If there is a step to take, call the tool for it now. If the task is finished or you need the person to decide something, say so in one sentence and stop.\n" +

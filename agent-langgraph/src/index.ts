@@ -39,7 +39,12 @@ import {
 } from "../../shared/model-providers";
 import { toLangChainMessages } from "./history";
 import { readReasoningEffort } from "./model-options";
-import { announcesNextStep, NUDGES_PER_RUN, nudgeMessage } from "./nudge";
+import {
+  announcesNextStep,
+  NUDGES_PER_RUN,
+  nudgeMessage,
+  stopsShortAfterTool,
+} from "./nudge";
 import { streamRun } from "./stream";
 import { toolAnswer } from "./tool-answer";
 
@@ -457,10 +462,14 @@ function buildGraph(input: RunAgentInput, chosen?: ManagedModel) {
         const last = state.messages.at(-1) as AIMessage | undefined;
         const calls = last?.tool_calls ?? [];
         if (calls.length === 0) {
+          const text = contentText(last?.content ?? "");
+          const before = state.messages.at(-2);
+          const afterTool = before !== undefined && ToolMessage.isInstance(before);
           const stalled =
             tools.length > 0 &&
             nudges < NUDGES_PER_RUN &&
-            announcesNextStep(contentText(last?.content ?? ""));
+            (announcesNextStep(text) ||
+              (afterTool && stopsShortAfterTool(text)));
           return stalled ? "nudge" : END;
         }
         /*

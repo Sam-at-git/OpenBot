@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { announcesNextStep } from "../src/nudge";
+import { announcesNextStep, stopsShortAfterTool } from "../src/nudge";
 import { type RunStreamEvent, streamRun } from "../src/stream";
 
 describe("a reply that announces a step and stops", () => {
@@ -35,6 +35,37 @@ describe("a reply that announces a step and stops", () => {
   test("only the end of a long answer counts", () => {
     const earlier = `我先打开了列表，然后点击了筛选。${"核对结果一切正常。".repeat(30)}`;
     expect(announcesNextStep(earlier)).toBe(false);
+  });
+});
+
+describe("a short reply straight after a tool result", () => {
+  // What IMS Tester stopped on, word for word, on 2026-11-14.
+  test.each([
+    "输出被我的 3000 字符截断破坏了 JSON。重写助手，完整取数。",
+    "环境只有一个分店。我先确认建分店、建员工、绑角色这三条接口可用。",
+    "单分店确认（只有 id=2 默认总公司）。现在查权限清单、部门结构和员工，为造角色做准备。",
+    "`/auth/me` returned 200 — my snippet just forgot the import.",
+    "核对完成，发现参考文档与实际契约有 2 处字段差异。落盘记录。",
+  ])("is a stall: %s", (text) => {
+    expect(stopsShortAfterTool(text)).toBe(true);
+  });
+
+  test.each([
+    "需要你来完成登录（我不会经手账号密码）。我把页面交给你。",
+    "表单已经填好，要我现在保存吗？",
+    "以下是要保存的内容，请确认后我再提交。",
+    "Should I submit it now?",
+    "",
+    `全部 12 条用例已跑完，结果如下。${"| CUS-001 | 通过 | 列表与手册一致 |".repeat(8)}`,
+  ])("is not: %s", (text) => {
+    expect(stopsShortAfterTool(text)).toBe(false);
+  });
+
+  test("checking something is not asking the person", () => {
+    expect(
+      announcesNextStep("我先确认建分店、建员工、绑角色这三条接口可用。"),
+    ).toBe(false);
+    expect(stopsShortAfterTool("我先确认这三条接口可用。")).toBe(true);
   });
 });
 
