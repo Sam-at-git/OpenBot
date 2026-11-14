@@ -1,3 +1,4 @@
+import { MODEL_IDLE_TIMEOUT_MS } from "@openbot/shared/model-fetch";
 import { checkNavigationTarget } from "../computer/target";
 
 /**
@@ -314,7 +315,12 @@ export function createAgentFetch(
       const response = await doFetch(target, {
         ...carried,
         redirect: "manual",
-      });
+        // An agent says nothing while its model reads a long conversation, and a local model can take
+        // more than Bun's five-minute idle limit to do it (a step at 94k tokens was cut off at 5 min,
+        // 2026-11-14). The agent gets the limit its own model calls have; a run that truly hangs is
+        // still ended by the stall timeout.
+        timeout: MODEL_IDLE_TIMEOUT_MS,
+      } as RequestInit);
       if (!REDIRECT_STATUSES.has(response.status)) return response;
 
       const location = response.headers.get("location");

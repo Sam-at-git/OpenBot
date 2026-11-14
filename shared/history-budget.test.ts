@@ -113,6 +113,43 @@ describe("keeping a long conversation within its budget", () => {
     expect(toolResultsToLeaveOut(items, odd).size).toBe(6);
   });
 
+  test("as a browser task grows, the cut only moves forward, and only every quarter of the budget", () => {
+    // A long browser task: mostly short results (a click, a type), every third a page snapshot.
+    const grown = { ...DEFAULT_HISTORY_BUDGET, maxTokens: 20_000 };
+    const items: { toolResult: boolean; tokens: number }[] = [];
+    let previous = new Set<number>();
+    let moves = 0;
+    for (let step = 0; step < 200; step++) {
+      items.push({ toolResult: true, tokens: step % 3 === 0 ? 1_500 : 150 });
+      const out = toolResultsToLeaveOut(items, grown);
+      for (const index of previous) expect(out.has(index)).toBe(true);
+      if (out.size !== previous.size) moves++;
+      previous = out;
+    }
+    const total = items.reduce((sum, item) => sum + item.tokens, 0);
+    // The saving needed only grows a whole step (5,000 tokens here) at a time.
+    expect(moves).toBeGreaterThan(0);
+    expect(moves).toBeLessThanOrEqual(Math.ceil(total / 5_000));
+    // With blocks of eight alone it could move every eight results.
+    expect(moves).toBeLessThan(200 / 8);
+  });
+
+  test("a short result reaching the end of the recent ones does not move the cut", () => {
+    const items = [
+      ...Array.from({ length: 40 }, (_, index) => ({
+        toolResult: true,
+        tokens: index % 2 === 0 ? 2_000 : 100,
+      })),
+    ];
+    const before = toolResultsToLeaveOut(items, budget);
+    // Two more short results push older short ones out of the most recent twenty.
+    const after = toolResultsToLeaveOut(
+      [...items, { toolResult: true, tokens: 0 }, { toolResult: true, tokens: 0 }],
+      budget,
+    );
+    expect([...after]).toEqual([...before]);
+  });
+
   test("a budget of 0 turns it off, and the environment sets it", () => {
     const messages = conversation(20);
     expect(trimAgUiHistory(messages, { ...budget, maxTokens: 0 })).toEqual(

@@ -14,8 +14,8 @@
  * The budget is for everything the model reads: the system prompt and tool definitions are counted first
  * (`reservedTokens`), and the conversation gets what is left.
  *
- * Results are left out in blocks rather than one at a time, so the start of the conversation stays the same for many
- * calls in a row and a provider's prompt cache keeps working.
+ * Results are left out in large steps rather than one at a time, so the start of the conversation stays the same for
+ * many calls in a row and a provider's prompt cache keeps working.
  */
 
 export type HistoryBudget = {
@@ -27,7 +27,7 @@ export type HistoryBudget = {
   minTokens: number;
   /** How many of the most recent tool results keep their short results whole. */
   keepRecentShort: number;
-  /** Tool results are left out in multiples of this, so the cut moves rarely. */
+  /** The cut between left-out and kept tool results moves in multiples of this many results. */
   block: number;
   /** How much of a left-out result is kept as a preview, in characters. */
   previewChars: number;
@@ -83,54 +83,64 @@ const NOTE_TOKENS = 120;
 const SHORT_NOTE_TOKENS = 12;
 
 /**
+ * When the cut moves, it saves at least this share of the budget more, so it then stays put while the conversation
+ * grows by that much. Every move changes the start of what the model reads and a local model then reads all of it
+ * again: about 80k tokens took 3.5 minutes on the M5 (2026-11-14). With blocks of eight alone, a browser task moved
+ * the cut every eight steps.
+ */
+export const CUT_STEP = 0.25;
+
+/**
  * Which tool results to leave out, by index, so the conversation fits what the budget leaves it after
  * `reservedTokens` (the system prompt and tools).
  *
- * Oldest first. Never one of the last `keepRecent` tool results, never a short one among the last `keepRecentShort`,
- * and never one too small to be worth a note. The count is rounded up to a whole `block`, so the cut only moves every
- * few results.
+ * The cut is a position in the list of tool results: before it, results are left out; after it, they are kept. It is
+ * never inside the last `keepRecent` results, and it moves in whole `block`s. What is left out depends only on where
+ * the cut is, never on how many results came after it, so the start of the conversation stays the same until the cut
+ * moves. A short result is left out only once it is `keepRecentShort` results behind the cut (a "saved" or an error is
+ * cheap and often matters), and one too small to be worth a note is never left out.
+ *
+ * The saving the cut must reach is rounded up to a whole {@link CUT_STEP} of the budget, so the cut moves rarely.
  */
 export function toolResultsToLeaveOut(
   items: readonly HistoryItem[],
   budget: HistoryBudget = DEFAULT_HISTORY_BUDGET,
   reservedTokens = 0,
 ): Set<number> {
-  const out = new Set<number>();
-  if (budget.maxTokens <= 0) return out;
+  if (budget.maxTokens <= 0) return new Set();
   const limit = Math.max(
     budget.maxTokens - reservedTokens,
     MIN_CONVERSATION_TOKENS,
   );
-  let total = items.reduce((sum, item) => sum + item.tokens, 0);
-  if (total <= limit) return out;
+  const total = items.reduce((sum, item) => sum + item.tokens, 0);
+  if (total <= limit) return new Set();
 
   const toolIndexes = items.flatMap((item, index) =>
     item.toolResult ? [index] : [],
   );
+  const isShort = (index: number) => items[index].tokens < budget.minTokens;
   const saving = (index: number) =>
-    items[index].tokens -
-    (items[index].tokens < budget.minTokens ? SHORT_NOTE_TOKENS : NOTE_TOKENS);
-  const recentShort = new Set(toolIndexes.slice(-budget.keepRecentShort));
-  const candidates = toolIndexes
-    .slice(0, Math.max(0, toolIndexes.length - budget.keepRecent))
-    .filter(
-      (index) =>
-        saving(index) > 0 &&
-        (items[index].tokens >= budget.minTokens || !recentShort.has(index)),
-    );
+    items[index].tokens - (isShort(index) ? SHORT_NOTE_TOKENS : NOTE_TOKENS);
+  const leftOutBefore = (cut: number) =>
+    toolIndexes
+      .slice(0, cut)
+      .filter(
+        (index, order) =>
+          saving(index) > 0 &&
+          (!isShort(index) || order < cut - budget.keepRecentShort),
+      );
 
-  let needed = 0;
-  for (const index of candidates) {
-    if (total <= limit) break;
-    total -= saving(index);
-    needed++;
+  const step = Math.max(1, Math.round(limit * CUT_STEP));
+  const required = Math.ceil((total - limit) / step) * step;
+  const furthest = Math.max(0, toolIndexes.length - budget.keepRecent);
+  const block = Math.max(1, budget.block);
+  let cut = 0;
+  let saved = 0;
+  while (cut < furthest && saved < required) {
+    cut = Math.min(furthest, cut + block);
+    saved = leftOutBefore(cut).reduce((sum, index) => sum + saving(index), 0);
   }
-  const rounded = Math.min(
-    candidates.length,
-    Math.ceil(needed / Math.max(1, budget.block)) * Math.max(1, budget.block),
-  );
-  for (const index of candidates.slice(0, rounded)) out.add(index);
-  return out;
+  return new Set(leftOutBefore(cut));
 }
 
 /**

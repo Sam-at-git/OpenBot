@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { MODEL_IDLE_TIMEOUT_MS } from "@openbot/shared/model-fetch";
 import { agentAuthHeaders, storeAgentAuth } from "../src/agents/auth-header";
 import { testAgentConnection } from "../src/agents/connection-test";
 import {
@@ -372,6 +373,24 @@ describe("dialling a stored agent endpoint", () => {
       forwardedProps: { openbotBotId: "risk", openbotRun: "signed.run.token" },
     }),
   };
+
+  test("every hop may stay silent as long as a model call, not Bun's five minutes", async () => {
+    // A local model reading a long conversation sends nothing for minutes, and so does the agent
+    // waiting on it. A step at 94k tokens was cut off at five minutes on 2026-11-14.
+    const { calls, impl } = recorder([
+      redirectTo("https://agent.example.com/ag-ui/v2"),
+      arrived,
+    ]);
+    const dial = createAgentFetch({ fetchImpl: impl });
+
+    await dial("https://agent.example.com/ag-ui", runRequest);
+
+    expect(calls).toHaveLength(2);
+    for (const call of calls)
+      expect((call.init as { timeout?: number }).timeout).toBe(
+        MODEL_IDLE_TIMEOUT_MS,
+      );
+  });
 
   test("the stored address is checked again before it is dialled", async () => {
     // The row was written before this guard existed, or under an older rule. Checking only the
