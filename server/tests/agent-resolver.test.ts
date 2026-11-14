@@ -58,6 +58,33 @@ describe("actor-scoped agent resolver", () => {
     ]);
   });
 
+  test("only a person's chat is given the computer tools the server runs", async () => {
+    const asked: string[] = [];
+    const actor = { id: "u1", role: "admin" as const };
+    const resolver = createActorAgentResolver({
+      loadAgents: async () =>
+        ["risk", "other"].map((id) => ({
+          id,
+          name: id,
+          type: "built_in" as const,
+          systemPrompt: "Work.",
+        })),
+      model: { provider: "openai", defaultModel: "unused" },
+      resolveModelApiKey: async () => "synthetic-key",
+      chatComputerToolsForActor: (id) => async (botId) => {
+        asked.push(`${id}:${botId}`);
+        return [];
+      },
+    });
+    // A routine, a hop or a follow-up resolves one Bot and brings its own computer tools.
+    await resolver.resolveAgentForActor(actor, "risk", {
+      initiator: { kind: "routine", id: "routine-1" },
+    });
+    expect(asked).toEqual([]);
+    await resolver.resolveAgentsForActor(actor);
+    expect(asked.sort()).toEqual(["u1:other", "u1:risk"]);
+  });
+
   test("propagates construction failures instead of reporting an unavailable coworker", async () => {
     const failure = new Error("key store unavailable");
     const resolver = createActorAgentResolver({

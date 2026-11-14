@@ -3,6 +3,7 @@ import type { ComputerGuidance } from "@openbot/shared/bot-prompt";
 import type { AuditInitiator } from "../audit";
 import type { AgentFetch, StallGuard } from "../channels/stall-guard";
 import {
+  type ChatComputerTools,
   type HandoffForRun,
   type LanguageModelForBot,
   type LoadAgentsForActor,
@@ -81,6 +82,12 @@ export type ActorAgentResolverDependencies = {
   stageAttachmentsForActor?: (actorId: string) => StageAttachmentsForBot;
   /** The model each Bot on OpenBot's own endpoint answers with, when an admin chose one (llm/). */
   modelChoice?: ModelChoiceForBot;
+  /**
+   * The computer tools a person's chat runs on the server (copilot.ts `ChatComputerTools`). Asked only by
+   * `resolveAgentsForActor`, the chat path: every headless turn resolves one Bot with `resolveAgentForActor` and brings
+   * its own through `toolsForTurn`, so it never gets them twice.
+   */
+  chatComputerToolsForActor?: (actorId: string) => ChatComputerTools;
 };
 
 /**
@@ -104,6 +111,8 @@ export function createActorAgentResolver(
      */
     onlyAgentId?: string,
     context?: AgentResolutionContext,
+    /** A person's chat, which is the one caller that runs the computer on the server. */
+    chat = false,
   ) => {
     /*
      * Learned Skills for this person's run: the Bot's own, plus the person's own Learning space and every Skill another
@@ -136,6 +145,7 @@ export function createActorAgentResolver(
       deps.languageModelForActor?.(actor.id),
       deps.stageAttachmentsForActor?.(actor.id),
       deps.modelChoice,
+      chat ? deps.chatComputerToolsForActor?.(actor.id) : undefined,
     ).then((agents) => {
       const loadName = deps.loadNameForActor;
       if (loadName) {
@@ -151,7 +161,13 @@ export function createActorAgentResolver(
   };
 
   const resolveAgentsForActor = async (actor: AgentActor) =>
-    resolveRegisteredAgents(actor, await deps.loadAgents(actor));
+    resolveRegisteredAgents(
+      actor,
+      await deps.loadAgents(actor),
+      undefined,
+      undefined,
+      true,
+    );
 
   return {
     resolveAgentsForActor,

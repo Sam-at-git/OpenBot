@@ -13,6 +13,7 @@ import { reasoningEffortFrom } from "@openbot/shared/model-fetch";
 import { isPersonBrowserId } from "@openbot/shared/openbot-browser";
 import { workOwner } from "@openbot/shared/work-owner";
 import { createTurnRunner } from "@openbot/toolkit/run-turn";
+import type { HeadlessTool } from "@openbot/toolkit/headless-tools";
 import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { createActivityStore } from "./activity/activity";
@@ -2139,6 +2140,35 @@ const actorAgentResolver = createActorAgentResolver({
     managedModel: (agentId) => llmService.managedModelFor(agentId),
     historyTokens: (agentId) => llmService.historyTokensFor(agentId),
   },
+  /*
+   * A person's chat runs the computer here, like a routine, when OPENBOT_CHAT_COMPUTER_ON_SERVER is on: the task goes
+   * on when they leave the page. The same check, seat and tools as a routine's, waiting for the person where a
+   * routine would pause, because in a chat somebody is watching.
+   */
+  ...(config.chatComputerOnServer && computerGateway
+    ? {
+        chatComputerToolsForActor:
+          (actorId: string) =>
+          async (botId: string): Promise<HeadlessTool[]> => {
+            const actor = await actorFor(actorId);
+            const profile = await agentProfileStore.get(actor, botId);
+            // A Team Bot's teammate uses the Bot, not its owner's signed-in computer.
+            if (!profile || !canUseComputer(profile, actor)) return [];
+            return createHeadlessComputerTools({
+              gateway: computerGateway,
+              seat: await computerGateway.seatFor(botId, actor.id),
+              actor: {
+                id: actor.id,
+                userId: actor.id,
+                initiator: PERSON_INITIATOR,
+              },
+              auditStore: bootAuditStore,
+              ...(signInService ? { signIn: signInService } : {}),
+              waitForPerson: true,
+            });
+          },
+      }
+    : {}),
 });
 
 const copilotRuntime = mountCopilotRuntime(

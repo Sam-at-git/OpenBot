@@ -81,6 +81,7 @@ function setup({
   });
   client.setQueryData(deploymentKeys.capabilities(), {
     generativeUi: true,
+    serverComputerTools: false,
     selfHostBanner: enabled,
   });
   const preferences: UserPreferences = {

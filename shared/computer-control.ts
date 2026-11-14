@@ -73,3 +73,19 @@ export type BrowserChallenge = {
   reason: string;
   requestId: string;
 };
+
+/**
+ * What the Bot is told when the person hands control back after doing what it asked.
+ *
+ * Said so the Bot has something to say. "The person handed control back" and a snapshot left the next turn with no
+ * news in it, and the model often ended that turn without a word: the conversation showed a blank turn under the help
+ * request. It names what was done, that the page in this result is as they left it, and asks for the next step said
+ * out loud before it is taken. First in the result, ahead of the page, because it is what the Bot must read first.
+ */
+export function handedBack(reason: string): string {
+  return (
+    `A person took control to do what you asked: "${reason}" They have finished and handed control back to you, ` +
+    "and the snapshot here is the page as they left it. Carry on with the task now. Start your reply by telling the " +
+    "person, in one short sentence, what you are doing next; if nothing is left to do, tell them it is done."
+  );
+}

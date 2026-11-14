@@ -401,6 +401,13 @@ export type DeploymentConfig = {
    */
   generativeUi: boolean;
   /**
+   * Whether a person's chat runs its Bot's computer tools on the server, as a routine does, instead of in their
+   * browser. On, a task goes on when the person leaves the page. Off until it has been tried on a deployment: it
+   * changes how every chat with a computer runs. Projected on /api/capabilities so the browser stops running the
+   * same tools itself.
+   */
+  chatComputerOnServer: boolean;
+  /**
    * Whether the signed-in app shows the banner offering help self-hosting OpenBot.
    *
    * On by default, because a fresh clone is somebody evaluating the template. A fork that runs
@@ -1382,6 +1389,12 @@ function generativeUiEnabled(environment: Environment): boolean {
   return value !== "false" && value !== "0";
 }
 
+/** Off unless explicitly "true" or "1". See DeploymentConfig.chatComputerOnServer. */
+function chatComputerOnServerEnabled(environment: Environment): boolean {
+  const value = optional(environment, "OPENBOT_CHAT_COMPUTER_ON_SERVER");
+  return value === "true" || value === "1";
+}
+
 /** Same rule as generated interfaces: on unless explicitly "false" or "0". */
 function selfHostBannerEnabled(environment: Environment): boolean {
   const value = optional(environment, "OPENBOT_SELF_HOST_BANNER");
@@ -1539,6 +1552,7 @@ export function loadConfig(
       singleUserAllowed(environment, signInConfigured(auth)),
     accessibility: accessibilityEnabled(environment),
     generativeUi: generativeUiEnabled(environment),
+    chatComputerOnServer: chatComputerOnServerEnabled(environment),
     selfHostBanner: selfHostBannerEnabled(environment),
     ...(optional(environment, "APP_DIST_DIR")
       ? { appDistDir: optional(environment, "APP_DIST_DIR") as string }

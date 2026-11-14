@@ -39,7 +39,10 @@ import {
 import { createIntelligenceThreadLock } from "@openbot/toolkit/copilotkit/thread-lock";
 import type { GrantedTool } from "@openbot/toolkit/granted-tool";
 import { parametersFor } from "@openbot/toolkit/granted-tool";
-import { HeadlessToolsMiddleware } from "@openbot/toolkit/headless-tools";
+import {
+  type HeadlessTool,
+  HeadlessToolsMiddleware,
+} from "@openbot/toolkit/headless-tools";
 import { sanitizeSeededHistory } from "@openbot/toolkit/history-sanitize";
 import { executeNativeApprovalTool } from "@openbot/toolkit/native-approval";
 import type { ThreadLock } from "@openbot/toolkit/ports";
@@ -613,6 +616,7 @@ export async function buildAgents(
   languageModelFor?: LanguageModelForBot,
   stageAttachments?: StageAttachmentsForBot,
   modelChoice?: ModelChoiceForBot,
+  chatComputerTools?: ChatComputerTools,
 ): Promise<Record<string, AbstractAgent>> {
   let vendors: readonly string[] = [];
   try {
@@ -672,7 +676,22 @@ export async function buildAgents(
           languageModelFor,
           stageAttachments,
           modelChoice,
+          chatComputerTools,
         );
+        /*
+         * A built-in Bot in a person's chat gets its computer tools the way a routine's does, as middleware around the
+         * agent. A remote Bot gets them inside its own middleware (`remoteAgentWithStandingRole`), because a remote
+         * agent is cloned for each run and loses anything added to it here.
+         */
+        if (agent.type === "built_in" && chatComputerTools) {
+          const computerTools = await chatComputerTools(agent.id);
+          if (computerTools.length > 0)
+            built.use(
+              new HeadlessToolsMiddleware(computerTools, initiator, {
+                maxSegments: CHAT_MAX_TOOL_SEGMENTS,
+              }),
+            );
+        }
         if (loadPersonalMemory)
           built.use(new PersonalMemoryMiddleware(agent.id, loadPersonalMemory));
         return [agent.id, built];
@@ -996,6 +1015,7 @@ async function buildAgent(
   languageModelFor?: LanguageModelForBot,
   stageAttachments?: StageAttachmentsForBot,
   modelChoice?: ModelChoiceForBot,
+  chatComputerTools?: ChatComputerTools,
 ): Promise<AbstractAgent> {
   if (agent.type === "unavailable") {
     return new UnavailableAgent(agent);
@@ -1127,6 +1147,7 @@ async function buildAgent(
       handoff,
       initiator,
       stage,
+      chatComputerTools,
     );
   }
 
@@ -1463,6 +1484,8 @@ function remoteAgentWithStandingRole(
   initiator?: AuditInitiator,
   /** Where attached files go in this Bot's computer, as for a built-in Bot. */
   stage?: StageAttachments,
+  /** A person's chat: the computer tools run here. See {@link ChatComputerTools}. */
+  computer?: ChatComputerTools,
 ) {
   /*
    * What this Bot holds, as a second standing message.
@@ -1494,6 +1517,8 @@ function remoteAgentWithStandingRole(
     tools: GrantedTool[],
     input: RunAgentInput,
     next: AbstractAgent,
+    /** A chat's computer tools, run here like a routine's. Not deployment tools: each call ends a segment. */
+    computerTools: HeadlessTool[] = [],
   ) => {
     const holdingsMessage = holdingsMessageFor(tools);
     const runAssertion = signRun
@@ -1630,20 +1655,27 @@ function remoteAgentWithStandingRole(
           // Who the Bot is calling back as, so the audit row names it rather than "an agent".
           forwardedProps,
         };
-        if (clientTools.length === 0) return next.run(prepared);
+        if (clientTools.length === 0 && computerTools.length === 0)
+          return next.run(prepared);
         return new HeadlessToolsMiddleware(
-          clientTools.map((tool) => ({
-            definition: {
-              name: tool.name,
-              description: tool.description,
-              parameters: z.toJSONSchema(tool.parameters) as Record<
-                string,
-                unknown
-              >,
-            },
-            execute: (args) => tool.execute(args),
-          })),
+          [
+            ...clientTools.map((tool) => ({
+              definition: {
+                name: tool.name,
+                description: tool.description,
+                parameters: z.toJSONSchema(tool.parameters) as Record<
+                  string,
+                  unknown
+                >,
+              },
+              execute: (args: unknown) => tool.execute(args),
+            })),
+            ...computerTools,
+          ],
           initiator,
+          computerTools.length > 0
+            ? { maxSegments: CHAT_MAX_TOOL_SEGMENTS }
+            : {},
         ).run(prepared, next);
       }),
     );
@@ -1661,11 +1693,17 @@ function remoteAgentWithStandingRole(
           Promise.all([
             narrow ? narrow(input) : Promise.resolve(tools),
             coordination?.(agent.id, input) ?? Promise.resolve([]),
-          ]).then(([offered, coordinationTools]) => [
-            ...offered,
-            ...coordinationTools,
-          ]),
-        ).pipe(switchMap((offered) => runWith(offered, input, next))),
+            // Resolved per run, for the Bot that is running: its seat can change between runs.
+            computer?.(agent.id) ?? Promise.resolve([]),
+          ]).then(([offered, coordinationTools, computerTools]) => ({
+            offered: [...offered, ...coordinationTools],
+            computerTools,
+          })),
+        ).pipe(
+          switchMap(({ offered, computerTools }) =>
+            runWith(offered, input, next, computerTools),
+          ),
+        ),
       );
       return isManagedEndpoint(agent) ? observeModelConnection(stream) : stream;
     });
@@ -1784,6 +1822,8 @@ export async function resolveRuntimeAgents(
   languageModelFor?: LanguageModelForBot,
   stageAttachments?: StageAttachmentsForBot,
   modelChoice?: ModelChoiceForBot,
+  /** Appended last, for the positional reason above. See {@link ChatComputerTools}. */
+  chatComputerTools?: ChatComputerTools,
 ): Promise<Record<string, AbstractAgent>> {
   const all = await loadAgents();
   if (all.length === 0) {
@@ -1823,11 +1863,24 @@ export async function resolveRuntimeAgents(
     languageModelFor,
     stageAttachments,
     modelChoice,
+    chatComputerTools,
   );
 }
 
 /** What one Bot may call, for the person whose request this is. */
 export type LoadToolsForBot = (botId: string) => Promise<GrantedTool[]>;
+
+/**
+ * The computer tools a person's chat with one Bot runs here rather than in their browser, or none.
+ *
+ * Only a person's chat asks (agents/agent-resolver.ts): a headless turn already gets its own through `toolsForTurn`.
+ * Run here, a task goes on when the person leaves the page, and a step can never be sent to a Bot the page has stopped
+ * showing ("There is no such Bot", 2026-11-14). See index.ts for the switch.
+ */
+export type ChatComputerTools = (botId: string) => Promise<HeadlessTool[]>;
+
+/** One click or snapshot is one round, so a chat's browsing task needs many more than a routine's thirty. */
+export const CHAT_MAX_TOOL_SEGMENTS = 150;
 
 /**
  * The model one built-in Bot runs on, for the person whose request this is, when an admin chose one under Admin,

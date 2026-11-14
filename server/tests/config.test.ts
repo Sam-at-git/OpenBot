@@ -1007,6 +1007,31 @@ describe("accessibility", () => {
  * too, so a value that silently failed to mean "off" would leave Bots generating interfaces nothing
  * renders rather than merely leaving a capability on.
  */
+describe("a chat's computer on the server", () => {
+  test("is off when nothing is set", () => {
+    expect(loadConfig(baseEnvironment).chatComputerOnServer).toBe(false);
+  });
+
+  test.each(["true", "1"])("is on for OPENBOT_CHAT_COMPUTER_ON_SERVER=%p", (value) => {
+    expect(
+      loadConfig({ ...baseEnvironment, OPENBOT_CHAT_COMPUTER_ON_SERVER: value })
+        .chatComputerOnServer,
+    ).toBe(true);
+  });
+
+  test.each(["false", "0", "", "yes", "on"])(
+    "stays off for OPENBOT_CHAT_COMPUTER_ON_SERVER=%p",
+    (value) => {
+      expect(
+        loadConfig({
+          ...baseEnvironment,
+          OPENBOT_CHAT_COMPUTER_ON_SERVER: value,
+        }).chatComputerOnServer,
+      ).toBe(false);
+    },
+  );
+});
+
 describe("generated interfaces", () => {
   test("are on when nothing is set", () => {
     expect(loadConfig(baseEnvironment).generativeUi).toBe(true);

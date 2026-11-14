@@ -4,7 +4,7 @@ import {
   useFrontendTool as useSDKFrontendTool,
 } from "@copilotkit/react-core/v2";
 import { useQueryClient } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { createContext, type ReactNode, useContext } from "react";
 import { InlineApproval } from "@/components/approvals/inline-approval";
 import { tryClient } from "@/lib/client";
 import { failedComputerCall } from "@/lib/computers/call";
@@ -12,6 +12,18 @@ import { useActiveBotHolder } from "./active-bot";
 import { frontendApprovalSnapshot } from "./approval-context";
 
 type RenderProps = { toolCallId: string; [key: string]: unknown };
+
+/**
+ * Whether the server runs this deployment's computer tools in a chat (OPENBOT_CHAT_COMPUTER_ON_SERVER).
+ *
+ * Provided above the tools only once the answer is known (provider.tsx), because the SDK registers a tool's handler
+ * once and never again: a handler registered while the answer was loading would run every step a second time.
+ */
+export const ServerRunsComputerContext = createContext(false);
+
+/** The tools the server runs for a chat when it runs the computer: every computer tool, and the refusal record. */
+const runByServer = (name: string) =>
+  name.startsWith("computer_") || name === "report_refusal";
 
 const needsConversation = (outcome: unknown) =>
   !!outcome &&
@@ -53,6 +65,8 @@ export function useFrontendTool<T extends Record<string, unknown>>(
   const queryClient = useQueryClient();
   const bot = useActiveBotHolder();
   const render = tool.render;
+  // Drawn here, run there: the server's result arrives with the call, and running it here would do it twice.
+  const drawOnly = useContext(ServerRunsComputerContext) && runByServer(tool.name);
   useSDKFrontendTool({
     ...tool,
     // Every computer tool, not only changes: a look a rule asks about waits on the same card.
@@ -72,7 +86,7 @@ export function useFrontendTool<T extends Record<string, unknown>>(
           },
         }
       : {}),
-    handler: tool.handler
+    handler: tool.handler && !drawOnly
       ? async (args, context) => {
           let direct: unknown;
           if (!writes.has(tool.name)) {

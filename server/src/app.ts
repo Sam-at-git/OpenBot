@@ -526,6 +526,8 @@ export function createApp(
        * both halves, so off means off.
        */
       generativeUi: config.generativeUi,
+      // Whether a chat's computer tools run on the server, so the browser draws them and does not run them too.
+      serverComputerTools: config.chatComputerOnServer,
       // Whether to offer help self-hosting OpenBot. A fork running it for its own people turns it off,
       // and a deployment that pays for Intelligence never sees it. See self-host-banner.ts.
       selfHostBanner: selfHostBanner

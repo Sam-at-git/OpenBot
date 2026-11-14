@@ -45,6 +45,8 @@ describe("runtime capabilities", () => {
       // Default-on. The browser reads this to decide whether to offer the tool that generates an
       // interface, so it has to be here and not only in the runtime.
       generativeUi: true,
+      // Off until a deployment turns it on: the browser runs a chat's computer tools itself.
+      serverComputerTools: false,
       // Default-on: a fresh clone is somebody evaluating the template.
       selfHostBanner: true,
       // Off: this deployment has an identity provider, so it is not somebody's local trial.

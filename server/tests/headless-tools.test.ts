@@ -653,6 +653,45 @@ test("a computer tool the caller offers is left to the caller when OpenBot adds 
   expect(events.at(-1)?.type).toBe(EventType.RUN_FINISHED);
 });
 
+test("a turn takes as many tool rounds as its caller allows, and no more", async () => {
+  const remote = remoteTurn((input, index) =>
+    lifecycle(input, toolCall(definition.name, "{}", `call-${index}`)),
+  );
+  let executions = 0;
+  const middleware = new HeadlessToolsMiddleware(
+    [
+      {
+        definition,
+        execute: async () => {
+          executions += 1;
+          return "The page";
+        },
+      },
+    ],
+    undefined,
+    { maxSegments: 3 },
+  );
+  await expect(
+    new Promise<void>((resolve, reject) =>
+      middleware
+        .run(
+          {
+            threadId: "thread",
+            runId: "run",
+            messages: [],
+            state: {},
+            context: [],
+            forwardedProps: {},
+            tools: [],
+          },
+          remote.agent,
+        )
+        .subscribe({ error: reject, complete: resolve }),
+    ),
+  ).rejects.toThrow("continuation limit");
+  expect(executions).toBe(3);
+});
+
 test("unknown computer tool calls become error results rather than commands", async () => {
   const remote = remoteTurn((input, index) =>
     lifecycle(

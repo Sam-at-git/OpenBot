@@ -19,6 +19,11 @@ export type DeploymentCapabilities = {
    */
   generativeUi: boolean;
   /**
+   * Whether a chat's computer tools run on the server (OPENBOT_CHAT_COMPUTER_ON_SERVER). When they do, the browser
+   * draws each step and must not run it as well. False when unsure, which is the browser running them, as before.
+   */
+  serverComputerTools: boolean;
+  /**
    * Whether to show the banner offering help self-hosting OpenBot. A fork that runs OpenBot for its
    * own organization turns it off with OPENBOT_SELF_HOST_BANNER=false, and the server answers false
    * for a deployment on a paid Intelligence plan.
@@ -71,6 +76,7 @@ export function deploymentCapabilitiesQueryOptions() {
         })
       ).json()) as {
         generativeUi?: boolean;
+        serverComputerTools?: boolean;
         selfHostBanner?: boolean;
         localEvaluation?: boolean;
         mode?: string;
@@ -80,6 +86,7 @@ export function deploymentCapabilitiesQueryOptions() {
 
       return {
         generativeUi: body.generativeUi === true,
+        serverComputerTools: body.serverComputerTools === true,
         selfHostBanner: body.selfHostBanner === true,
         localEvaluation: body.localEvaluation === true,
         localThreads: body.mode === "local",

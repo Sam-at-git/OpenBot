@@ -34,6 +34,7 @@ for (const variant of ["compact", "default"] as const) {
     test(`${variant} dictation: ${action} preserves the draft and follows the selected action`, async () => {
       queryClient.setQueryData(deploymentKeys.capabilities(), {
         generativeUi: true,
+        serverComputerTools: false,
         transcription: true,
       });
       const audio = new Blob(["recording"], { type: "audio/webm" });

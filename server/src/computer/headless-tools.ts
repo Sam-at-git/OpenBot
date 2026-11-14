@@ -2,6 +2,7 @@ import {
   type HeadlessTool,
   HeadlessToolSuspension,
 } from "@openbot/toolkit/headless-tools";
+import { handedBack } from "@openbot/shared/computer-control";
 import { z } from "zod";
 import { currentApprovalContext } from "../approvals/types";
 import { type AuditStore, recordAuditEvent } from "../audit";
@@ -33,6 +34,23 @@ export type HeadlessSignInRequester = {
 export const SIGN_IN_TOOL_DESCRIPTION =
   "Ask the person you work for to sign you in to a website. They get a private sign-in form outside this conversation (or take over the browser), and their login is typed straight into your browser by the computer. You never see the username, password or code, and must never ask for them any other way. Open the site's sign-in page first, then call this with the site's address. This turn pauses until they answer; you are then told only whether it worked.";
 
+/** How long a chat waits for the person to hand the browser back or type a secret, as the browser itself waits. */
+const WAIT_FOR_PERSON_MS = 10 * 60_000;
+const WAIT_POLL_MS = 1_000;
+
+function pause(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) return resolve();
+    const finish = () => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", finish);
+      resolve();
+    };
+    const timer = setTimeout(finish, ms);
+    signal.addEventListener("abort", finish, { once: true });
+  });
+}
+
 /** Shipped browser/file/command tools, with identity bound before the model supplies arguments. */
 export function createHeadlessComputerTools(options: {
   gateway: ComputerGateway;
@@ -47,8 +65,65 @@ export function createHeadlessComputerTools(options: {
   auditStore?: AuditStore;
   /** The private sign-in request. Absent leaves the Bot with help and secret requests only. */
   signIn?: HeadlessSignInRequester;
+  /**
+   * Wait for the person instead of pausing the turn, as a browser chat does.
+   *
+   * A chat whose computer runs on the server has somebody watching: the help card and the masked secret prompt are on
+   * their screen. So asking for help, asking for a secret, and finding the person at the wheel wait here for up to ten
+   * minutes and answer the way the browser's own tools answer. Only past that does the turn pause as a routine's does.
+   */
+  waitForPerson?: boolean;
+  /** For tests: how often and how long to wait. */
+  waitTiming?: { pollMs: number; maxMs: number };
 }): HeadlessTool[] {
-  const { gateway, seat, actor, auditStore, signIn } = options;
+  const { gateway, seat, actor, auditStore, signIn, waitForPerson } = options;
+  const pollMs = options.waitTiming?.pollMs ?? WAIT_POLL_MS;
+  const maxMs = options.waitTiming?.maxMs ?? WAIT_FOR_PERSON_MS;
+
+  /**
+   * The person's answer to a handoff, or undefined when they did not answer in time. Shaped like the browser's
+   * `awaitHandoff` result, so the Bot reads the same thing whichever side ran the tool.
+   */
+  async function handedBackOrNot(
+    requestId: string,
+    signal: AbortSignal,
+  ): Promise<unknown | undefined> {
+    const deadline = Date.now() + maxMs;
+    while (Date.now() < deadline) {
+      if (signal.aborted)
+        return {
+          ok: false,
+          stopped: true,
+          requestId,
+          reason:
+            "Stopped waiting. A person who has control keeps it until they hand back.",
+        };
+      const request = (
+        await gateway.control(seat, requestId).catch(() => undefined)
+      )?.request;
+      if (request?.id === requestId) {
+        if (request.status === "completed")
+          return {
+            result: handedBack(request.reason),
+            handoffStatus: "completed",
+            ...(await gateway.snapshot(seat)),
+            ok: true,
+            requestId,
+          };
+        if (request.status !== "waiting" && request.status !== "taken")
+          return {
+            ok: false,
+            requestId,
+            handoffStatus: request.status,
+            reason:
+              request.interruption ??
+              `The handoff was ${request.status}. The person has not completed this request.`,
+          };
+      }
+      await pause(pollMs, signal);
+    }
+    return undefined;
+  }
   const botId = seat.botId;
   const snapshotId = z.number().int().positive();
   const ref = z.string().min(1);
@@ -89,6 +164,16 @@ export function createHeadlessComputerTools(options: {
             };
           }
           if (error instanceof HumanHasControlError) {
+            // What the browser's own call answers on a 409: the person is at the wheel, nothing was done.
+            if (waitForPerson)
+              return {
+                ok: false,
+                humanHasControl: true,
+                notPerformed: true,
+                reason: error.message,
+                ...(error.requestId ? { requestId: error.requestId } : {}),
+                ...(error.handoff ? { handoff: error.handoff } : {}),
+              };
             throw new HeadlessToolSuspension(error.message, {
               kind: "computer_handoff",
               botId,
@@ -119,8 +204,15 @@ export function createHeadlessComputerTools(options: {
       "computer_navigate",
       "Open a web page and return its title and readable text. Use the returned content to answer.",
       z.strictObject({ url: text }),
-      async ({ url }, { toolCallId }) => {
+      async ({ url }, { toolCallId, signal }) => {
         const result = await gateway.navigate(seat, actor, url, toolCallId);
+        if (result.challenge && waitForPerson) {
+          const answer = await handedBackOrNot(
+            result.challenge.requestId,
+            signal,
+          );
+          if (answer) return { ...(answer as object), challenge: result.challenge };
+        }
         if (result.challenge)
           throw new HeadlessToolSuspension(result.challenge.reason, {
             kind: "computer_handoff",
@@ -242,22 +334,47 @@ export function createHeadlessComputerTools(options: {
       "computer_request_help",
       "Create a durable request for the person to take the browser and sign in or clear a challenge. This unattended turn pauses until a person helps; never ask them to send you a password.",
       z.strictObject({ reason: text }),
-      async ({ reason }, { toolCallId }) =>
-        waiting(
-          await gateway.requestHelp(seat, actor, reason, toolCallId),
+      async ({ reason }, { toolCallId, signal }) => {
+        const state = await gateway.requestHelp(
+          seat,
+          actor,
           reason,
-        ),
+          toolCallId,
+        );
+        if (waitForPerson && state.request) {
+          const answer = await handedBackOrNot(state.request.id, signal);
+          if (answer) return answer;
+        }
+        return waiting(state, reason);
+      },
     ),
     tool(
       "computer_request_secret",
       "Ask the person to enter one secret directly into the focused field. Click the field first. You must never receive the secret; this unattended turn pauses for the person.",
       z.strictObject({ label: text, ref, snapshotId }),
-      async (input) =>
-        waiting(
-          await gateway.requestSecret(seat, actor, input),
+      async (input, { signal }) => {
+        const state = await gateway.requestSecret(seat, actor, input);
+        if (waitForPerson) {
+          // Answered when `secretWanted` clears; the value never comes back here.
+          const deadline = Date.now() + maxMs;
+          while (Date.now() < deadline && !signal.aborted) {
+            const now = await gateway.control(seat).catch(() => undefined);
+            if (now && now.secretWanted === undefined)
+              return {
+                ok: true,
+                result: `The person has entered ${input.label} into the field. It was typed straight into the page and you were not told what it is.`,
+              };
+            await pause(pollMs, signal);
+          }
+          if (signal.aborted)
+            return { ok: true, result: "The request was cancelled." };
+        }
+        return waiting(
+          state,
           `The person must enter ${input.label} directly into the page.`,
           "computer_secret",
-        ),
+        );
+      },
     ),
   ];
   if (signIn)

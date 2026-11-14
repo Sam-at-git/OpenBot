@@ -2,6 +2,7 @@ import { CopilotKitProvider } from "@copilotkit/react-core/v2";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { deploymentCapabilitiesQueryOptions } from "@/lib/deployment/queries";
+import { ServerRunsComputerContext } from "./approval-tools";
 import { generativeUiProviderOptions } from "./a2ui";
 import { ActiveBotProvider } from "./active-bot";
 import { BotTools } from "./bot-tools";
@@ -29,7 +30,9 @@ import { SkillTools } from "./skill-tools";
  * runtime rather than returning it).
  */
 export function CopilotProvider({ children }: { children: ReactNode }) {
-  const { data: capabilities } = useQuery(deploymentCapabilitiesQueryOptions());
+  const { data: capabilities, isPending } = useQuery(
+    deploymentCapabilitiesQueryOptions(),
+  );
 
   return (
     <CopilotKitProvider
@@ -57,9 +60,19 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
     >
       {/* Computer tools target the Bot declared by the mounted surface. */}
       <ActiveBotProvider>
-        <ComputerTools />
-        {/* The private sign-in request: a card whose form posts to the server, never to the Bot. */}
-        <SignInTool />
+        {/*
+          Mounted once whether the server or this browser runs the computer is known, because the SDK registers each
+          tool's handler once. Unknown for good (the request failed) is this browser running them, as before.
+        */}
+        {isPending ? null : (
+          <ServerRunsComputerContext.Provider
+            value={capabilities?.serverComputerTools === true}
+          >
+            <ComputerTools />
+            {/* The private sign-in request: a card whose form posts to the server, never to the Bot. */}
+            <SignInTool />
+          </ServerRunsComputerContext.Provider>
+        )}
         {/*
           Draws a Bot bringing in another Bot. Registers no tool: `message_bot` runs on the server,
           where the grant and the caps are. A hop that happens off-screen is the thing to avoid.
