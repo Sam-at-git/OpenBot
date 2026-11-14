@@ -464,7 +464,8 @@ function buildGraph(input: RunAgentInput, chosen?: ManagedModel) {
         if (calls.length === 0) {
           const text = contentText(last?.content ?? "");
           const before = state.messages.at(-2);
-          const afterTool = before !== undefined && ToolMessage.isInstance(before);
+          const afterTool =
+            before !== undefined && ToolMessage.isInstance(before);
           const stalled =
             tools.length > 0 &&
             nudges < NUDGES_PER_RUN &&
