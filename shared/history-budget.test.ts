@@ -144,7 +144,11 @@ describe("keeping a long conversation within its budget", () => {
     const before = toolResultsToLeaveOut(items, budget);
     // Two more short results push older short ones out of the most recent twenty.
     const after = toolResultsToLeaveOut(
-      [...items, { toolResult: true, tokens: 0 }, { toolResult: true, tokens: 0 }],
+      [
+        ...items,
+        { toolResult: true, tokens: 0 },
+        { toolResult: true, tokens: 0 },
+      ],
       budget,
     );
     expect([...after]).toEqual([...before]);

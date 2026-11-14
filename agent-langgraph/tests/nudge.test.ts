@@ -11,7 +11,7 @@ describe("a reply that announces a step and stops", () => {
     "当前是看板视图，按手册说明「新建」按钮在表格视图里。先切换到表格视图。",
     "The form is open. Let me take a snapshot to get the field references.",
     // 2026-11-14: nothing before the verb.
-    "好在接口细节我已经全量内联进去了，所以把那句话说改成\"有则以其为准\"更合理。我打开它编辑。",
+    '好在接口细节我已经全量内联进去了，所以把那句话说改成"有则以其为准"更合理。我打开它编辑。',
     "`/` 菜单里出现了 `bug-report`。选它并发一条真实测试指令（只读范围：查重 + 生成草稿，不提交）。",
   ])("is caught: %s", (text) => {
     expect(announcesNextStep(text)).toBe(true);
