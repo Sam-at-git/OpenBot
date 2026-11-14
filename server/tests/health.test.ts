@@ -76,6 +76,7 @@ describe("runtime capabilities", () => {
       "mode",
       "durableHistory",
       "generativeUi",
+      "serverComputerTools",
       "selfHostBanner",
       "localEvaluation",
       "transcription",

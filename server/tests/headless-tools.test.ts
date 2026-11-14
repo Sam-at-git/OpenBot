@@ -671,25 +671,32 @@ test("a turn takes as many tool rounds as its caller allows, and no more", async
     undefined,
     { maxSegments: 3 },
   );
-  await expect(
-    new Promise<void>((resolve, reject) =>
-      middleware
-        .run(
-          {
-            threadId: "thread",
-            runId: "run",
-            messages: [],
-            state: {},
-            context: [],
-            forwardedProps: {},
-            tools: [],
-          },
-          remote.agent,
-        )
-        .subscribe({ error: reject, complete: resolve }),
-    ),
-  ).rejects.toThrow("continuation limit");
+  const events: BaseEvent[] = [];
+  await new Promise<void>((resolve, reject) =>
+    middleware
+      .run(
+        {
+          threadId: "thread",
+          runId: "run",
+          messages: [],
+          state: {},
+          context: [],
+          forwardedProps: {},
+          tools: [],
+        },
+        remote.agent,
+      )
+      .subscribe({
+        next: (event) => events.push(event),
+        error: reject,
+        complete: resolve,
+      }),
+  );
   expect(executions).toBe(3);
+  expect(events.at(-1)).toMatchObject({
+    type: EventType.RUN_ERROR,
+    message: expect.stringContaining("continuation limit"),
+  });
 });
 
 test("unknown computer tool calls become error results rather than commands", async () => {
