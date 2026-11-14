@@ -1012,12 +1012,17 @@ describe("a chat's computer on the server", () => {
     expect(loadConfig(baseEnvironment).chatComputerOnServer).toBe(false);
   });
 
-  test.each(["true", "1"])("is on for OPENBOT_CHAT_COMPUTER_ON_SERVER=%p", (value) => {
-    expect(
-      loadConfig({ ...baseEnvironment, OPENBOT_CHAT_COMPUTER_ON_SERVER: value })
-        .chatComputerOnServer,
-    ).toBe(true);
-  });
+  test.each(["true", "1"])(
+    "is on for OPENBOT_CHAT_COMPUTER_ON_SERVER=%p",
+    (value) => {
+      expect(
+        loadConfig({
+          ...baseEnvironment,
+          OPENBOT_CHAT_COMPUTER_ON_SERVER: value,
+        }).chatComputerOnServer,
+      ).toBe(true);
+    },
+  );
 
   test.each(["false", "0", "", "yes", "on"])(
     "stays off for OPENBOT_CHAT_COMPUTER_ON_SERVER=%p",

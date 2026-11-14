@@ -66,7 +66,8 @@ export function useFrontendTool<T extends Record<string, unknown>>(
   const bot = useActiveBotHolder();
   const render = tool.render;
   // Drawn here, run there: the server's result arrives with the call, and running it here would do it twice.
-  const drawOnly = useContext(ServerRunsComputerContext) && runByServer(tool.name);
+  const drawOnly =
+    useContext(ServerRunsComputerContext) && runByServer(tool.name);
   useSDKFrontendTool({
     ...tool,
     // Every computer tool, not only changes: a look a rule asks about waits on the same card.
@@ -86,62 +87,67 @@ export function useFrontendTool<T extends Record<string, unknown>>(
           },
         }
       : {}),
-    handler: tool.handler && !drawOnly
-      ? async (args, context) => {
-          let direct: unknown;
-          if (!writes.has(tool.name)) {
-            direct = await tool.handler?.(args, context);
-            if (!needsConversation(direct)) return direct;
+    handler:
+      tool.handler && !drawOnly
+        ? async (args, context) => {
+            let direct: unknown;
+            if (!writes.has(tool.name)) {
+              direct = await tool.handler?.(args, context);
+              if (!needsConversation(direct)) return direct;
+            }
+            let snapshot: ReturnType<typeof frontendApprovalSnapshot>;
+            try {
+              snapshot = frontendApprovalSnapshot(context);
+            } catch {
+              // A surface with no observed conversation. The server still gates the action; it can
+              // run it when nothing asks, and says why when something does. A look already went.
+              return direct ?? tool.handler?.(args, context);
+            }
+            let response: Response;
+            try {
+              response = await tryClient(
+                `/api/approvals/computer/${encodeURIComponent(bot.current)}`,
+                { method: "POST", body: snapshot, signal: context.signal },
+              );
+            } catch (error) {
+              // The same two answers callComputer gives when the request itself does not complete.
+              if (error instanceof DOMException && error.name === "AbortError")
+                return { ok: false, reason: "Stopped.", stopped: true };
+              return {
+                ok: false,
+                reason: "The assistant's computer could not be reached.",
+              };
+            }
+            const payload: unknown = await response.json().catch(() => null);
+            if (response.status === 202) {
+              if (!context.agent)
+                throw new Error("The interrupted conversation is unavailable.");
+              // Stop signals the SDK to discard this handler's unfinished result. The server owns
+              // resume: the decision executes the action once and continues this conversation.
+              copilotkit.stopAgent({ agent: context.agent });
+              // Draw the card now rather than on the inbox's next poll.
+              void queryClient.invalidateQueries({ queryKey: ["approvals"] });
+              return { waiting: true };
+            }
+            // Answered, not thrown: a thrown handler ends the Bot's turn with nothing said (see
+            // failedComputerCall), where a failed result lets it snapshot again or try another way.
+            if (!response.ok)
+              return failedComputerCall(
+                response.status,
+                payload && typeof payload === "object"
+                  ? (payload as Record<string, unknown>)
+                  : null,
+              );
+            if (
+              !payload ||
+              typeof payload !== "object" ||
+              !("result" in payload)
+            )
+              return failedComputerCall(response.status, {
+                error: "The computer action returned no result.",
+              });
+            return payload.result;
           }
-          let snapshot: ReturnType<typeof frontendApprovalSnapshot>;
-          try {
-            snapshot = frontendApprovalSnapshot(context);
-          } catch {
-            // A surface with no observed conversation. The server still gates the action; it can
-            // run it when nothing asks, and says why when something does. A look already went.
-            return direct ?? tool.handler?.(args, context);
-          }
-          let response: Response;
-          try {
-            response = await tryClient(
-              `/api/approvals/computer/${encodeURIComponent(bot.current)}`,
-              { method: "POST", body: snapshot, signal: context.signal },
-            );
-          } catch (error) {
-            // The same two answers callComputer gives when the request itself does not complete.
-            if (error instanceof DOMException && error.name === "AbortError")
-              return { ok: false, reason: "Stopped.", stopped: true };
-            return {
-              ok: false,
-              reason: "The assistant's computer could not be reached.",
-            };
-          }
-          const payload: unknown = await response.json().catch(() => null);
-          if (response.status === 202) {
-            if (!context.agent)
-              throw new Error("The interrupted conversation is unavailable.");
-            // Stop signals the SDK to discard this handler's unfinished result. The server owns
-            // resume: the decision executes the action once and continues this conversation.
-            copilotkit.stopAgent({ agent: context.agent });
-            // Draw the card now rather than on the inbox's next poll.
-            void queryClient.invalidateQueries({ queryKey: ["approvals"] });
-            return { waiting: true };
-          }
-          // Answered, not thrown: a thrown handler ends the Bot's turn with nothing said (see
-          // failedComputerCall), where a failed result lets it snapshot again or try another way.
-          if (!response.ok)
-            return failedComputerCall(
-              response.status,
-              payload && typeof payload === "object"
-                ? (payload as Record<string, unknown>)
-                : null,
-            );
-          if (!payload || typeof payload !== "object" || !("result" in payload))
-            return failedComputerCall(response.status, {
-              error: "The computer action returned no result.",
-            });
-          return payload.result;
-        }
-      : undefined,
+        : undefined,
   });
 }

@@ -1,8 +1,8 @@
+import { handedBack } from "@openbot/shared/computer-control";
 import {
   type HeadlessTool,
   HeadlessToolSuspension,
 } from "@openbot/toolkit/headless-tools";
-import { handedBack } from "@openbot/shared/computer-control";
 import { z } from "zod";
 import { currentApprovalContext } from "../approvals/types";
 import { type AuditStore, recordAuditEvent } from "../audit";
@@ -211,7 +211,8 @@ export function createHeadlessComputerTools(options: {
             result.challenge.requestId,
             signal,
           );
-          if (answer) return { ...(answer as object), challenge: result.challenge };
+          if (answer)
+            return { ...(answer as object), challenge: result.challenge };
         }
         if (result.challenge)
           throw new HeadlessToolSuspension(result.challenge.reason, {

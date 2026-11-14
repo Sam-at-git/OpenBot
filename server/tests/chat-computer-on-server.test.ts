@@ -56,7 +56,11 @@ function toolsFor(gateway: ComputerGateway, waitForPerson: boolean) {
   const tools = createHeadlessComputerTools({
     gateway,
     seat: botSeat("bot"),
-    actor: { id: "owner", userId: "owner", initiator: { kind: "routine", id: "routine" } },
+    actor: {
+      id: "owner",
+      userId: "owner",
+      initiator: { kind: "routine", id: "routine" },
+    },
     waitForPerson,
     waitTiming: { pollMs: 1, maxMs: 200 },
   });
