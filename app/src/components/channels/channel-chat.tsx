@@ -39,7 +39,7 @@ import { observeApprovalAgent } from "@/lib/copilot/approval-context";
 import { ConversationProvider } from "@/lib/copilot/conversation";
 import { afterMs, joinWithin } from "@/lib/copilot/join-thread";
 import { repairUnansweredToolCalls } from "@/lib/copilot/repair-history";
-import { stoppedReason } from "@/lib/copilot/stopped-turn";
+import { refusedAsBusy, stoppedReason } from "@/lib/copilot/stopped-turn";
 import { readThreadPage } from "@/lib/copilot/thread-messages";
 import { TurnUsageProvider, useTurnUsage } from "@/lib/copilot/turn-usage";
 import { useSkillCommands } from "@/lib/plugins/skill-commands";
@@ -912,10 +912,14 @@ export function ChannelChat({
      * `transcriptMessages` draws user and assistant turns, so this never appears on screen — the
      * chip is what says a skill was used, and it stays visible in the message they sent.
      */
+    // What this turn adds, so a turn the runtime refused outright can take it back off the screen.
+    const addedThisTurn = new Set<string>();
     for (const instruction of skillInstructions) {
+      const id = newId();
+      addedThisTurn.add(id);
       target.addMessage({
         content: instruction,
-        id: newId(),
+        id,
         role: "system",
       });
     }
@@ -932,9 +936,11 @@ export function ChannelChat({
         ),
       );
 
+    const userMessageId = newId();
+    addedThisTurn.add(userMessageId);
     target.addMessage({
       content: toMessageContent(trimmed, attachments),
-      id: newId(),
+      id: userMessageId,
       role: "user",
     });
     report(trimmed || describeAttachments(attachments), null);
@@ -975,6 +981,17 @@ export function ChannelChat({
      * transcript kept the turn.
      */
     if (turnFailure.current !== null) {
+      /*
+       * EXCEPT A TURN THE RUNTIME REFUSED BECAUSE THE CONVERSATION WAS BUSY. Nothing reached the Bot and nothing
+       * was stored, so there is no partial answer to keep, and leaving the message up draws it as sent. It would
+       * disappear anyway the next time the conversation loads. The words are back in the box, and the notice says
+       * to send them again.
+       */
+      if (refusedAsBusy(turnFailure.current)) {
+        target.setMessages(
+          target.messages.filter((message) => !addedThisTurn.has(message.id)),
+        );
+      }
       throw new Error(turnFailure.current);
     }
     return target.messages

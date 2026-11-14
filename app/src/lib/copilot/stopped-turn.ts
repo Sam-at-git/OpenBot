@@ -29,7 +29,33 @@ export function stoppedReason(reported: unknown): string {
       : typeof reported === "string"
         ? reported
         : "";
+  if (refusedAsBusy(said)) return STILL_WORKING;
   return said.trim() || "The Bot stopped without saying why.";
+}
+
+/**
+ * The runtime's own words when it refuses a run because the conversation already has one going.
+ *
+ * `ThreadAlreadyRunningError` reaches the browser as a RUN_ERROR with exactly this message (the runtime's
+ * `sse-response`, and `local-threads/runner.ts` throws it). It is the one refusal that is not the Bot's fault and has
+ * an obvious next step, and in the runtime's words it read as an internal failure. It became common once a chat's
+ * computer ran on the server: a turn keeps going while the person is on another page, and coming back to the
+ * conversation does not tell this screen the turn is still running, so the next message is sent into it (2026-11-14).
+ */
+const THREAD_ALREADY_RUNNING = "Thread already running";
+
+export const STILL_WORKING =
+  "This Bot is still working on an earlier request, so your message wasn't sent. Send it again when it's done.";
+
+/** Whether this turn was refused because the conversation was busy, so nothing reached the Bot at all. */
+export function refusedAsBusy(reported: unknown): boolean {
+  const said =
+    reported instanceof Error
+      ? reported.message
+      : typeof reported === "string"
+        ? reported
+        : "";
+  return said.trim() === THREAD_ALREADY_RUNNING || said === STILL_WORKING;
 }
 
 /**
