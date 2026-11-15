@@ -47,6 +47,7 @@ import {
 } from "./nudge";
 import { streamRun, type ThinkingLiveness } from "./stream";
 import { toolAnswer } from "./tool-answer";
+import { toolResultForModel } from "./tool-result-for-model";
 
 /**
  * The same Bot, on a framework.
@@ -364,6 +365,20 @@ function callsTheSurface(
 
 const HISTORY_BUDGET = historyBudgetFrom(process.env);
 
+/** A tool result without the image data and the bulk a model cannot use; see `tool-result-for-model.ts`. */
+function shrunkForModel(message: BaseMessage): BaseMessage {
+  if (!ToolMessage.isInstance(message) || typeof message.content !== "string")
+    return message;
+  const content = toolResultForModel(message.content);
+  if (content === message.content) return message;
+  return new ToolMessage({
+    content,
+    tool_call_id: message.tool_call_id,
+    ...(message.name ? { name: message.name } : {}),
+    ...(message.id ? { id: message.id } : {}),
+  });
+}
+
 /**
  * What the model is sent on each call: past the budget, the oldest tool results become a short note
  * (`shared/history-budget.ts`). Applied before every call rather than once per run, because one run
@@ -376,7 +391,7 @@ function trimmedForModel(
   reservedTokens: number,
 ): BaseMessage[] {
   return trimHistory(
-    messages,
+    messages.map(shrunkForModel),
     {
       isToolResult: (message) => ToolMessage.isInstance(message),
       text: (message) => contentText(message.content),
