@@ -326,9 +326,7 @@ export async function streamRun(
   } catch (error) {
     // Stopped from outside: whoever was reading has gone, so there is nobody to send an ending to.
     if (options.signal?.aborted) {
-      console.info(
-        JSON.stringify({ type: "run-cancelled", run: input.runId }),
-      );
+      console.info(JSON.stringify({ type: "run-cancelled", run: input.runId }));
       return;
     }
     // A text message left open would strand the surface mid-message, so it is closed before the
