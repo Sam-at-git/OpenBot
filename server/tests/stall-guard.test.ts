@@ -79,6 +79,41 @@ describe("a Bot that stops streaming", () => {
     expect(body.endsWith("\n\n")).toBe(true);
   });
 
+  test("hangs up on the Bot, so it can stop its model", async () => {
+    const guard = createStallGuard({ stallMs: 60 });
+    let seen: AbortSignal | undefined;
+    const watched = guard.watch(BOT, async (_url, init) => {
+      seen = init.signal ?? undefined;
+      return sse(saysNothing());
+    });
+
+    const response = await watched("http://bot.internal/ag-ui", RUN_REQUEST);
+    expect(seen?.aborted).toBe(false);
+    await new Response(response.body).text();
+    guard.stop();
+
+    expect(seen?.aborted).toBe(true);
+  });
+
+  test("still hangs up when the caller stops the run itself", async () => {
+    const guard = createStallGuard({ stallMs: 60_000 });
+    const caller = new AbortController();
+    let seen: AbortSignal | undefined;
+    const watched = guard.watch(BOT, async (_url, init) => {
+      seen = init.signal ?? undefined;
+      return sse(speaks([]));
+    });
+
+    await watched("http://bot.internal/ag-ui", {
+      ...RUN_REQUEST,
+      signal: caller.signal,
+    });
+    caller.abort();
+    guard.stop();
+
+    expect(seen?.aborted).toBe(true);
+  });
+
   test("the row says what started the run, so a routine's stall is not a person's", async () => {
     const audit = collecting();
     const guard = createStallGuard({ stallMs: 60, auditStore: audit.store });

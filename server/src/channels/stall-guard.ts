@@ -258,7 +258,15 @@ export function createStallGuard(options: StallGuardOptions): StallGuard {
     if (!watchdog.enabled) return inner;
 
     return async (url, requestInit) => {
-      const response = await inner(url, requestInit);
+      /*
+       * Our own way to hang up on the Bot. Cancelling the body's reader stops this process reading, and a stall
+       * also aborts the request, so the Bot sees its caller go and can stop its model.
+       */
+      const hangUp = new AbortController();
+      const signal = requestInit.signal
+        ? AbortSignal.any([requestInit.signal, hangUp.signal])
+        : hangUp.signal;
+      const response = await inner(url, { ...requestInit, signal });
       const body = response.body;
       // A refusal or an empty body is not a stream and has already ended. Passing it through
       // untouched keeps every error path exactly as it was, which is the point of the pass-through.
@@ -276,6 +284,7 @@ export function createStallGuard(options: StallGuardOptions): StallGuard {
         writer,
         cancelUpstream: () => {
           void reader.cancel().catch(() => undefined);
+          hangUp.abort();
         },
         sse: response.headers.get("content-type") !== PROTOBUF_CONTENT_TYPE,
         requestBody:

@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 import {
   EMPTY_REPLY_FALLBACK,
   type RunStreamEvent,
+  type StreamRunOptions,
   streamRun,
+  THINKING_EVENT,
 } from "../src/stream";
 
 /**
@@ -21,6 +23,7 @@ const RUN = { runId: "run_1", threadId: "thread_1" };
 /** Collect what streamRun sends, as plain `{type, ...}` records. */
 async function collect(
   events: RunStreamEvent[] | (() => Promise<AsyncIterable<RunStreamEvent>>),
+  options?: StreamRunOptions,
 ): Promise<Array<Record<string, unknown>>> {
   const sent: Array<Record<string, unknown>> = [];
   const makeEvents =
@@ -30,8 +33,12 @@ async function collect(
           (async function* () {
             for (const event of events) yield event;
           })();
-  await streamRun(makeEvents, RUN, (event) =>
-    sent.push(event as unknown as Record<string, unknown>),
+  await streamRun(
+    makeEvents,
+    RUN,
+    (event) => sent.push(event as unknown as Record<string, unknown>),
+    undefined,
+    options,
   );
   return sent;
 }
@@ -361,5 +368,103 @@ describe("the usage a run reports", () => {
   test("without a model name nothing extra is sent", async () => {
     const sent = await collect([modelStream("答案"), modelEnd(10, 2)]);
     expect(types(sent)).not.toContain("CUSTOM");
+  });
+});
+
+describe("a model that thinks before it speaks", () => {
+  /** A clock the events move: each event below sets the time it arrives at. */
+  function clocked(steps: Array<[number, RunStreamEvent]>) {
+    let time = 0;
+    const events = async () =>
+      (async function* () {
+        for (const [at, event] of steps) {
+          time = at;
+          yield event;
+        }
+      })();
+    return { events, now: () => time };
+  }
+  const thinking = modelStream("");
+  const start: RunStreamEvent = { event: "on_chat_model_start" };
+  const thinkingEvents = (sent: Array<Record<string, unknown>>) =>
+    sent.filter((event) => event.name === THINKING_EVENT);
+
+  test("says it is still working, at most once per interval", async () => {
+    const { events, now } = clocked([
+      [0, start],
+      [10, thinking],
+      [40, thinking],
+      [50, thinking],
+      [85, thinking],
+      [90, modelStream("Done.")],
+    ]);
+    const sent = await collect(events, {
+      thinking: { everyMs: 30, forMs: 1_000, now },
+    });
+
+    expect(thinkingEvents(sent)).toHaveLength(2);
+    expect(thinkingEvents(sent)[0]).toMatchObject({
+      type: "CUSTOM",
+      value: { runId: "run_1" },
+    });
+    // Nothing of the thinking itself goes out, and the answer is unchanged.
+    expect(types(sent).filter((type) => type !== "CUSTOM")).toEqual([
+      "TEXT_MESSAGE_START",
+      "TEXT_MESSAGE_CONTENT",
+      "TEXT_MESSAGE_END",
+      "RUN_FINISHED",
+    ]);
+  });
+
+  test("stops counting a model call that thinks for too long", async () => {
+    const { events, now } = clocked([
+      [0, start],
+      [40, thinking],
+      [80, thinking],
+      [120, thinking],
+      [160, thinking],
+    ]);
+    const sent = await collect(events, {
+      thinking: { everyMs: 30, forMs: 100, now },
+    });
+
+    expect(thinkingEvents(sent)).toHaveLength(2);
+  });
+
+  test("each model call gets its own allowance", async () => {
+    const { events, now } = clocked([
+      [0, start],
+      [200, thinking],
+      [210, start],
+      [250, thinking],
+    ]);
+    const sent = await collect(events, {
+      thinking: { everyMs: 30, forMs: 100, now },
+    });
+
+    expect(thinkingEvents(sent)).toHaveLength(1);
+  });
+
+  test("says nothing extra unless asked to", async () => {
+    const sent = await collect([modelStream(""), modelStream("Hi.")]);
+
+    expect(thinkingEvents(sent)).toHaveLength(0);
+  });
+});
+
+describe("a run nobody is reading any more", () => {
+  test("ends quietly, with no error sent after it", async () => {
+    const stop = new AbortController();
+    const sent = await collect(
+      async () =>
+        (async function* () {
+          yield modelStream("Half");
+          stop.abort();
+          throw new DOMException("Aborted", "AbortError");
+        })(),
+      { signal: stop.signal },
+    );
+
+    expect(types(sent)).not.toContain("RUN_ERROR");
   });
 });

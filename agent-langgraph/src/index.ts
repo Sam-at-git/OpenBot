@@ -45,7 +45,7 @@ import {
   nudgeMessage,
   stopsShortAfterTool,
 } from "./nudge";
-import { streamRun } from "./stream";
+import { streamRun, type ThinkingLiveness } from "./stream";
 import { toolAnswer } from "./tool-answer";
 
 /**
@@ -285,6 +285,7 @@ async function callTool(
   run: string,
   name: string,
   args: Record<string, unknown>,
+  signal?: AbortSignal,
 ): Promise<string> {
   if (!TOOL_TOKEN) {
     return "Refused. This Bot has no credential for calling tools back through its deployment.";
@@ -311,6 +312,7 @@ async function callTool(
        * anything, so the deployment says it and this only carries the note.
        */
       body: JSON.stringify({ name, args, run }),
+      ...(signal ? { signal } : {}),
     });
     return await toolAnswer(response);
   } catch (error) {
@@ -420,14 +422,16 @@ function buildGraph(input: RunAgentInput, chosen?: ManagedModel) {
 
   return (
     new StateGraph(MessagesAnnotation)
-      .addNode("answer", async (state) => ({
+      // The run's config goes to the model, so stopping the run stops the model call with it.
+      .addNode("answer", async (state, config) => ({
         messages: [
           await bound.invoke(
             trimmedForModel(state.messages, budget, toolTokens),
+            config,
           ),
         ],
       }))
-      .addNode("tools", async (state) => {
+      .addNode("tools", async (state, config) => {
         const last = state.messages.at(-1) as AIMessage;
         const results = await Promise.all(
           /*
@@ -442,6 +446,7 @@ function buildGraph(input: RunAgentInput, chosen?: ManagedModel) {
                 run,
                 call.name,
                 (call.args ?? {}) as Record<string, unknown>,
+                config.signal,
               );
               return new ToolMessage({
                 content: text,
@@ -495,16 +500,45 @@ function buildGraph(input: RunAgentInput, chosen?: ManagedModel) {
   );
 }
 
+/**
+ * A thinking model says it is still working every 30 seconds, for up to 15 minutes of thinking per model call.
+ *
+ * Well inside OpenBot's ten silent minutes, and the same 15 minutes a model call may be idle (`shared/model-fetch.ts`).
+ */
+const THINKING_LIVENESS: ThinkingLiveness = {
+  everyMs: 30_000,
+  forMs: 15 * 60_000,
+};
+
 async function runAgent(
   input: RunAgentInput,
   chosen?: ManagedModel,
+  requestSignal?: AbortSignal,
 ): Promise<Response> {
   const encoder = new EventEncoder();
+  /*
+   * Stopping a run stops the model.
+   *
+   * OpenBot ends a turn by closing this stream: a person pressing stop, or a Bot silent for too long. The model call
+   * used to carry on regardless. A local model then went on writing for minutes nobody would read, and held up
+   * every other request queued behind it (the M5 after the 01:24 stall on 2026-11-15). Ollama stops generating when
+   * its request is aborted.
+   */
+  const stop = new AbortController();
+  requestSignal?.addEventListener("abort", () => stop.abort(), {
+    once: true,
+  });
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const utf8 = new TextEncoder();
-      const send = (event: BaseEvent) =>
-        controller.enqueue(utf8.encode(encoder.encodeSSE(event)));
+      const send = (event: BaseEvent) => {
+        if (stop.signal.aborted) return;
+        try {
+          controller.enqueue(utf8.encode(encoder.encodeSSE(event)));
+        } catch {
+          stop.abort();
+        }
+      };
 
       send({
         type: "RUN_STARTED",
@@ -523,14 +557,22 @@ async function runAgent(
                 chosen ? "openai" : PROVIDER,
               ),
             },
-            { version: "v2" },
+            { version: "v2", signal: stop.signal },
           ),
         input,
         send,
         chosen?.model ?? MODEL,
+        { signal: stop.signal, thinking: THINKING_LIVENESS },
       );
 
-      controller.close();
+      try {
+        controller.close();
+      } catch {
+        // Already cancelled by the reader.
+      }
+    },
+    cancel() {
+      stop.abort();
     },
   });
 
@@ -568,7 +610,7 @@ serve({
       // runs off mid-read. The server's own stall timeout still ends a run that never answers.
       server.timeout(request, 0);
       const input = (await request.json()) as RunAgentInput;
-      return runAgent(input, readManagedModel(request.headers));
+      return runAgent(input, readManagedModel(request.headers), request.signal);
     }
 
     return Response.json({ error: "Not found." }, { status: 404 });

@@ -27,6 +27,35 @@ import { textOfChunk } from "./deltas";
 export const EMPTY_REPLY_FALLBACK =
   "The model returned an empty reply and the run ended without an answer. This can happen with a strict provider; try asking again.";
 
+/**
+ * The event a run sends while its model is thinking and has nothing to show yet.
+ *
+ * OpenBot ends a turn whose Bot sends nothing for ten minutes (`server/src/channels/stall-guard.ts`). A local
+ * thinking model can write for longer than that before its first visible word, and it was ended mid-thought: IMS
+ * Tester at 01:24 on 2026-11-15. This says it is still working. It carries no thinking text, and nothing draws it:
+ * it is the same ignored event a governed turn sends while it waits (`server/src/delivery/opentag.ts`).
+ */
+export const THINKING_EVENT = "openbot.working";
+
+/** How often a thinking model says it is still working, and for how long per model call. */
+export type ThinkingLiveness = {
+  /** At most one event this often. */
+  everyMs: number;
+  /**
+   * Thinking past this, in one model call, stops counting. A model that thinks in a circle then goes quiet and is
+   * ended like any other stalled Bot.
+   */
+  forMs: number;
+  now?: () => number;
+};
+
+/** What a run can be told besides its events. */
+export type StreamRunOptions = {
+  /** Aborted when nobody is reading any more. The run then ends quietly: there is nobody to tell. */
+  signal?: AbortSignal;
+  thinking?: ThinkingLiveness;
+};
+
 /** The framework's streamed events, in the shape this reader looks at. */
 export interface RunStreamEvent {
   event: string;
@@ -48,10 +77,21 @@ export interface RunStreamEvent {
 export async function streamRun(
   makeEvents: () => Promise<AsyncIterable<RunStreamEvent>>,
   input: Pick<RunAgentInput, "runId" | "threadId">,
-  send: (event: BaseEvent) => void,
+  sendEvent: (event: BaseEvent) => void,
   /** The model this run used, reported with its token counts in an `openbot.usage` event. */
   model?: string,
+  options: StreamRunOptions = {},
 ): Promise<void> {
+  const now = options.thinking?.now ?? Date.now;
+  /** When this run last sent anything. The caller has just sent RUN_STARTED. */
+  let lastSentAt = now();
+  /** When the model call now streaming began. */
+  let callStartedAt = now();
+  const send = (event: BaseEvent) => {
+    lastSentAt = now();
+    sendEvent(event);
+  };
+
   /*
    * One message id per stretch of prose.
    *
@@ -97,7 +137,26 @@ export async function streamRun(
       { name: string; args: Record<string, unknown> }
     >();
 
+    /*
+     * A chunk with nothing to show is the model thinking. Said at most every `everyMs`, and only between messages:
+     * a message that is open is already proof of life.
+     */
+    const stillThinking = () => {
+      const thinking = options.thinking;
+      if (!thinking || textOpen) return;
+      const at = now();
+      if (at - callStartedAt > thinking.forMs) return;
+      if (at - lastSentAt < thinking.everyMs) return;
+      send({
+        type: "CUSTOM",
+        name: THINKING_EVENT,
+        value: { runId: input.runId },
+      } as BaseEvent);
+    };
+
     for await (const event of events) {
+      if (event.event === "on_chat_model_start") callStartedAt = now();
+
       if (event.event === "on_chat_model_stream") {
         /*
          * Both content shapes, because the API decides which one arrives.
@@ -108,7 +167,10 @@ export async function streamRun(
          * `docker-compose.yml`.
          */
         const text = textOfChunk(event.data?.chunk?.content);
-        if (!text) continue;
+        if (!text) {
+          stillThinking();
+          continue;
+        }
 
         if (!textOpen) {
           send({
@@ -262,6 +324,13 @@ export async function streamRun(
       runId: input.runId,
     } as BaseEvent);
   } catch (error) {
+    // Stopped from outside: whoever was reading has gone, so there is nobody to send an ending to.
+    if (options.signal?.aborted) {
+      console.info(
+        JSON.stringify({ type: "run-cancelled", run: input.runId }),
+      );
+      return;
+    }
     // A text message left open would strand the surface mid-message, so it is closed before the
     // error is reported. agent-bot has the same hazard and the same ordering.
     if (textOpen) {
