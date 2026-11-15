@@ -19,7 +19,8 @@
 export const TOOL_RESULT_MAX_CHARS = 16_000;
 
 /** A run of base64 this long is binary data, never prose: no word, path or id is two thousand characters. */
-const ENCODED_DATA = /(?:data:[\w.+-]+\/[\w.+-]+;base64,)?[A-Za-z0-9+/]{2000,}={0,2}/g;
+const ENCODED_DATA =
+  /(?:data:[\w.+-]+\/[\w.+-]+;base64,)?[A-Za-z0-9+/]{2000,}={0,2}/g;
 
 export function toolResultForModel(
   content: string,
