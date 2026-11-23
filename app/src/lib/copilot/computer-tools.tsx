@@ -395,6 +395,45 @@ export function ComputerTools() {
 
   useFrontendTool({
     available: offered.browser,
+    name: "computer_upload",
+    // Must match UPLOAD_TOOL_DESCRIPTION in server/src/computer/headless-tools.ts.
+    description:
+      "Put files from your workspace into a file upload field on the page, without opening a file dialog. Give the ref of the file input, or of the visible upload button beside it, from your latest snapshot, its snapshotId, and paths relative to your workspace such as EmployeeMaterials/report.pdf. Do not click the upload button first. The page's change event fires as usual; if it has a separate submit button, click that afterwards, then check the page.",
+    parameters: z.object({
+      ref: z
+        .string()
+        .describe("Ref of the file input or its upload button"),
+      snapshotId: z.number().describe("The snapshotId that ref came from"),
+      paths: z
+        .array(z.string())
+        .min(1)
+        .max(10)
+        .describe("Files, relative to your workspace"),
+    }),
+    handler: async (
+      input: { ref: string; snapshotId: number; paths: string[] },
+      { signal }: { signal?: AbortSignal } = {},
+    ) =>
+      callComputer(
+        bot.current,
+        "/upload-to-page",
+        { method: "POST", body: input },
+        signal,
+      ),
+    render: ({ args, result, status }) => (
+      <ActionLine
+        running={status !== "complete"}
+        label="Uploaded to the page"
+        detail={Array.isArray(args?.paths) ? args.paths.join(", ") : undefined}
+        refused={outcomeOf(result).refused === true}
+        failed={didNotWork(outcomeOf(result))}
+        notYet={stillStarting(outcomeOf(result))}
+      />
+    ),
+  });
+
+  useFrontendTool({
+    available: offered.browser,
     name: "computer_click",
     description:
       "Click something on the page: a button, a link, a checkbox or a radio option. Give the ref " +

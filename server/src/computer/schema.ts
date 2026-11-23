@@ -29,6 +29,7 @@ export const COMPUTER_TOOLS = [
   "computer_type",
   "computer_key",
   "computer_scroll",
+  "computer_upload",
   "computer_read_file",
   "computer_download_file",
   "computer_write_file",
@@ -57,6 +58,7 @@ export const COMPUTER_ACTING_TOOLS = [
   "computer_type",
   "computer_key",
   "computer_scroll",
+  "computer_upload",
   "computer_read_file",
   "computer_download_file",
   "computer_write_file",
@@ -166,6 +168,8 @@ export type TypeInput = ActionTarget & {
 };
 export type KeyInput = Partial<ActionTarget> & { key: string };
 export type ScrollInput = { deltaY?: number };
+/** Workspace files for a page's file field: `ref` is the field, its label, or the button beside it. */
+export type UploadToPageInput = ActionTarget & { paths: string[] };
 
 /**
  * What an action reports back.
@@ -176,8 +180,10 @@ export type ScrollInput = { deltaY?: number };
  * secret into two places that keep it. `characters` is enough to confirm the field was filled.
  */
 export type ActionResult = {
-  action: "click" | "type" | "key" | "scroll";
+  action: "click" | "type" | "key" | "scroll" | "upload";
   ref?: string;
+  /** For `upload`: what was put into the field. */
+  files?: { name: string; bytes: number }[];
   /**
    * The label of the element acted on, as the gateway resolved it.
    *

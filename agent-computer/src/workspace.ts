@@ -202,6 +202,43 @@ export function createWorkspace(
     resolvePath,
 
     /**
+     * Files about to leave for a web page, checked and sized.
+     *
+     * Stricter than a read: the path must already be the file's real path within the workspace, so no link and no `./`.
+     * A policy rule and the audit row both see the path as the Bot wrote it, and for bytes leaving the computer that
+     * has to be the file that actually goes.
+     */
+    async uploadable(
+      requested: readonly string[],
+    ): Promise<{ path: string; name: string; bytes: number; realPath: string }[]> {
+      const root = await realpath(rootPath);
+      const files = [];
+      let total = 0;
+      for (const path of requested) {
+        const realPath = await resolvePath(path, false);
+        if (relative(root, realPath) !== path)
+          throw new WorkspacePathError(
+            `${path} is a link or not written as the file's own path. Name the file itself, relative to your workspace.`,
+          );
+        const info = await stat(realPath);
+        if (!info.isFile())
+          throw new WorkspaceFileError(`${path} is not a file.`);
+        total += info.size;
+        if (total > limits.downloadBytes)
+          throw new WorkspaceFileTooLargeError(
+            `These files are too large to upload together: the limit is ${limits.downloadBytes} bytes.`,
+          );
+        files.push({
+          path,
+          name: basename(realPath),
+          bytes: info.size,
+          realPath,
+        });
+      }
+      return files;
+    },
+
+    /**
      * What is in the workspace.
      *
      * Recursive, because a Bot that saved `reports/august/summary.csv` needs to find it again, and a

@@ -415,6 +415,28 @@ export function createComputerRoutes(
     }),
   );
 
+  routes.post("/:botId/upload-to-page", (context) =>
+    act(context, gateway.seatFor, (seat, actor, body, signal) => {
+      const ref = asRef(body);
+      if (!ref) return badRef;
+      const paths = body?.paths;
+      if (
+        !Array.isArray(paths) ||
+        paths.length === 0 ||
+        paths.length > 10 ||
+        paths.some((path) => typeof path !== "string" || !path)
+      ) {
+        return { error: "Between 1 and 10 workspace file paths are required." };
+      }
+      return gateway.uploadToPage(
+        seat,
+        actor,
+        { ...ref, paths: [...new Set(paths as string[])] },
+        signal,
+      );
+    }),
+  );
+
   routes.post("/:botId/key", (context) =>
     act(context, gateway.seatFor, (seat, actor, body, signal) => {
       if (typeof body?.key !== "string" || !body.key) {

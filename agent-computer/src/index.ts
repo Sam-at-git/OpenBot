@@ -35,6 +35,7 @@ import {
 import { handleEgressPolicyRequest, startEgressFilter } from "./egress";
 import { enterText, FieldValueError } from "./enter-text";
 import { identity } from "./identity";
+import { PageUploadError, pageUploadPaths, uploadToField } from "./page-upload";
 import {
   assertPageAccess,
   navigateWebPage,
@@ -1746,6 +1747,7 @@ serve<StreamData>({
             // The caller going away is the stop signal: the surface aborts its request, the server
             // aborts the one it made to this computer, and Bun aborts this one in turn.
             request.signal,
+            botId,
           );
           return json({ ...detail, elapsedMs: Date.now() - startedAt });
         } catch (error) {
@@ -1781,8 +1783,17 @@ serve<StreamData>({
             return json({ error: error.message, stale: true }, 409);
           }
           // The same reasoning: the computer is fine, and the Bot fixes it by sending another value.
-          if (error instanceof FieldValueError) {
+          if (
+            error instanceof FieldValueError ||
+            error instanceof PageUploadError
+          ) {
             return json({ error: error.message }, 400);
+          }
+          if (
+            error instanceof WorkspacePathError ||
+            error instanceof WorkspaceFileError
+          ) {
+            return json({ error: error.message }, fileStatus(error));
           }
           return json({ error: describe(error, "The action failed.") }, 502);
         }
@@ -1826,9 +1837,16 @@ type ActionBody = {
   key?: unknown;
   deltaY?: unknown;
   submit?: unknown;
+  paths?: unknown;
 };
 
-const ACTIONS = new Set(["/click", "/type", "/key", "/scroll"]);
+const ACTIONS = new Set([
+  "/click",
+  "/type",
+  "/key",
+  "/scroll",
+  "/upload-to-page",
+]);
 
 const HUMAN_INPUT = new Set([
   "/human/click",
@@ -1924,7 +1942,8 @@ async function performAction(
   target: Page,
   action: string,
   body: ActionBody,
-  signal?: AbortSignal,
+  signal: AbortSignal | undefined,
+  botId: string,
 ): Promise<Record<string, unknown>> {
   // Passed to every Playwright call below. It does not disable the timeout, which still applies.
   const acting = { timeout: ACTION_TIMEOUT_MS, ...(signal ? { signal } : {}) };
@@ -1963,6 +1982,24 @@ async function performAction(
       ref,
       characters: body.text.length,
       submitted: body.submit === true,
+      url: target.url(),
+    };
+  }
+
+  if (action === "/upload-to-page") {
+    if (!ref) throw new PageUploadError("An upload needs the ref of a field.");
+    // From this seat's own workspace only, each path confined there before the browser is told about it.
+    const { files } = await workspaces.for(botId);
+    const chosen = await files.uploadable(pageUploadPaths(body.paths));
+    await uploadToField(
+      await resolveRef(session, target, ref, expected),
+      chosen.map((file) => file.realPath),
+      acting,
+    );
+    return {
+      action: "upload",
+      ref,
+      files: chosen.map(({ name, bytes }) => ({ name, bytes })),
       url: target.url(),
     };
   }

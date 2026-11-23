@@ -10,6 +10,7 @@ const labels: Record<string, string> = {
   computer_type: "Filled in field",
   computer_key: "Pressed key",
   computer_scroll: "Scrolled page",
+  computer_upload: "Uploaded file to page",
 };
 
 /** Whether a tool call is one of the browser steps a tool group draws with its page link. */

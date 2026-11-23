@@ -219,6 +219,9 @@ export function decideFromSnapshot(
       needed.push("cloudBrowser");
     }
     if (context.intent === "navigate") needed.push("cloudNetwork");
+    // A file from the computer, into a page in the browser: it takes both.
+    if (context.intent === "upload_file")
+      needed.push("cloudComputer", "cloudBrowser");
   }
 
   for (const capability of needed) {

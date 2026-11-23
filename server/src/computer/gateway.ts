@@ -104,6 +104,7 @@ import type {
   SnapshotElement,
   SnapshotResult,
   TypeInput,
+  UploadToPageInput,
   WriteFileInput,
   WriteFileResult,
 } from "./schema";
@@ -281,6 +282,12 @@ export interface ComputerGateway {
     actor: ActionActor,
     input: WriteFileInput,
   ): Promise<WriteFileResult>;
+  uploadToPage(
+    seat: ComputerSeat,
+    actor: ActionActor,
+    input: UploadToPageInput,
+    signal?: AbortSignal,
+  ): Promise<ActionResult>;
   /** A file's raw bytes, into the seat's workspace: an attached document, for a skill's script to open. */
   uploadFile(
     seat: ComputerSeat,
@@ -669,6 +676,8 @@ export function createComputerGateway(
       /** The generation the ref came from. A ref only resolves against its own snapshot. */
       snapshotId?: number;
       filePath?: string;
+      /** Further files in the same action. Each is decided and audited as `filePath` is. */
+      alsoFiles?: string[];
       targetUrl?: string;
       key?: string;
       /** The command a shell call is about to run, so a rule can be written against it. */
@@ -755,22 +764,32 @@ export function createComputerGateway(
       mcp: { server: "", tool: "", effect: "" },
     };
 
-    const decision = evaluateActionPolicy(options.policy(), context);
-    await write(auditStore, {
-      toolName,
-      seat,
-      actor,
-      element,
-      ref,
-      ...(subject.key ? { key: subject.key } : {}),
-      ...(subject.command ? { command: subject.command } : {}),
-      filePath,
-      pageUrl,
-      decision,
-    });
-    if (!decision.forward) {
-      throw new ActionRefusedError(decision.reason, decision.matched);
-    }
+    const decideAndRecord = async (
+      decided: string | undefined,
+      asked: PolicyContext,
+    ) => {
+      const outcome = evaluateActionPolicy(options.policy(), asked);
+      await write(auditStore, {
+        toolName,
+        seat,
+        actor,
+        element,
+        ref,
+        ...(subject.key ? { key: subject.key } : {}),
+        ...(subject.command ? { command: subject.command } : {}),
+        filePath: decided,
+        pageUrl,
+        decision: outcome,
+      });
+      if (!outcome.forward) {
+        throw new ActionRefusedError(outcome.reason, outcome.matched);
+      }
+      return outcome;
+    };
+    const decision = await decideAndRecord(filePath, context);
+    // Every file, so a rule about one cannot be stepped around by sending it second.
+    for (const also of subject.alsoFiles ?? [])
+      await decideAndRecord(also, { ...context, file: describeFile(also) });
 
     let result: T;
     try {
@@ -813,16 +832,24 @@ export function createComputerGateway(
         actorId: actor.id,
         botId: seat.botId,
         toolRef: toolName,
-        effect: ["activate", "type", "write_file", "run_command"].includes(
-          intent ?? "",
-        )
+        effect: [
+          "activate",
+          "type",
+          "write_file",
+          "upload_file",
+          "run_command",
+        ].includes(intent ?? "")
           ? "write"
           : "read",
-        scope: filePath
-          ? filePath.split("/").slice(0, -1).join("/") || "workspace"
-          : subject.command
-            ? "workspace"
-            : hostOf(pageUrl) || "browser",
+        // An upload's scope is the site receiving it: allowing one site must not allow every other.
+        scope:
+          intent === "upload_file"
+            ? hostOf(pageUrl) || "browser"
+            : filePath
+              ? filePath.split("/").slice(0, -1).join("/") || "workspace"
+              : subject.command
+                ? "workspace"
+                : hostOf(pageUrl) || "browser",
         args: continuation?.args ?? { ...subject, signal: undefined },
         target: {
           pageUrl,
@@ -1423,6 +1450,37 @@ export function createComputerGateway(
       );
     },
 
+    /** Workspace files into a page's upload field. The computer confines each path to this seat's workspace. */
+    uploadToPage(
+      seat: ComputerSeat,
+      actor: ActionActor,
+      input: UploadToPageInput,
+      signal?: AbortSignal,
+    ) {
+      const [filePath, ...alsoFiles] = input.paths;
+      return govern(
+        "computer_upload",
+        seat,
+        actor,
+        {
+          ref: input.ref,
+          snapshotId: input.snapshotId,
+          ...(filePath ? { filePath } : {}),
+          alsoFiles,
+          ...(signal ? { signal } : {}),
+        },
+        (address) =>
+          post<ActionResult>(
+            seat,
+            "/upload-to-page",
+            input,
+            signal,
+            undefined,
+            address,
+          ),
+      );
+    },
+
     /**
      * The file tools, governed like everything else.
      *
@@ -1693,6 +1751,8 @@ export function intentOf(
       return "read_file";
     case "computer_download_file":
       return "download_file";
+    case "computer_upload":
+      return "upload_file";
     case "computer_write_file":
     case "computer_delete_file":
     case "computer_make_folder":

@@ -34,6 +34,10 @@ export type HeadlessSignInRequester = {
 export const SIGN_IN_TOOL_DESCRIPTION =
   "Ask the person you work for to sign you in to a website. They get a private sign-in form outside this conversation (or take over the browser), and their login is typed straight into your browser by the computer. You never see the username, password or code, and must never ask for them any other way. Open the site's sign-in page first, then call this with the site's address. This turn pauses until they answer; you are then told only whether it worked.";
 
+/** Must match the description in app/src/lib/copilot/computer-tools.tsx. */
+export const UPLOAD_TOOL_DESCRIPTION =
+  "Put files from your workspace into a file upload field on the page, without opening a file dialog. Give the ref of the file input, or of the visible upload button beside it, from your latest snapshot, its snapshotId, and paths relative to your workspace such as EmployeeMaterials/report.pdf. Do not click the upload button first. The page's change event fires as usual; if it has a separate submit button, click that afterwards, then check the page.";
+
 /** How long a chat waits for the person to hand the browser back or type a secret, as the browser itself waits. */
 const WAIT_FOR_PERSON_MS = 10 * 60_000;
 const WAIT_POLL_MS = 1_000;
@@ -289,6 +293,19 @@ export function createHeadlessComputerTools(options: {
       async (input) => ({
         ok: true,
         ...(await gateway.scroll(seat, actor, input)),
+      }),
+    ),
+    tool(
+      "computer_upload",
+      UPLOAD_TOOL_DESCRIPTION,
+      z.strictObject({
+        ref,
+        snapshotId,
+        paths: z.array(text).min(1).max(10),
+      }),
+      async (input, { signal }) => ({
+        ok: true,
+        ...(await gateway.uploadToPage(seat, actor, input, signal)),
       }),
     ),
     tool(

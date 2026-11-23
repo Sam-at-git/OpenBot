@@ -85,6 +85,8 @@ const ACTING_LINES = [
   "and work from the new refs.",
   "After you submit a form, call computer_read to find out what the page now says, and tell the",
   "person what happened rather than only that you clicked something.",
+  "To attach a file from your workspace to a page, call computer_upload with the ref of the upload",
+  "field or its button. Do not click the button first: a file dialog is something you cannot use.",
   "",
   "You also have a workspace: your own folder of files that survives between conversations.",
   "Use computer_write_file to save notes, lists or data you will want later, and computer_read_file",
