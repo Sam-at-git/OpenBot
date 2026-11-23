@@ -5,7 +5,6 @@ import {
 import type { Hono as HonoApp, MiddlewareHandler } from "hono";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
-import { serveStatic } from "hono/bun";
 import { enterpriseControls } from "./admin/controls";
 import { createEnterpriseGate } from "./admin/gate";
 import { createEnterpriseAdminRoutes } from "./admin/routes";
@@ -75,6 +74,7 @@ import type { ComponentStore } from "./components/store";
 import type { ComputerGateway } from "./computer/gateway";
 import type { PageFrameStore } from "./computer/page-frames";
 import type { PolicyStore } from "./computer/policy-store";
+import { mountBuiltApp } from "./built-app";
 import { createComputerRoutes } from "./computer/routes";
 import {
   type ComputerSecretStore,
@@ -2125,29 +2125,7 @@ export function createApp(
    * Absent in development: Vite serves the app and proxies `/api` here, so `APP_DIST_DIR` is unset
    * and none of this mounts.
    */
-  if (config.appDistDir) {
-    const root = config.appDistDir;
-    app.use("/*", serveStatic({ root }));
-    /*
-     * A single-page app owns its routing, so a path with no file behind it is not missing: it is a
-     * route the browser resolves once index.html has loaded. Without this, every deep link and every
-     * refresh away from `/` is a 404, which is the classic way this deployment shape breaks.
-     *
-     * Written out rather than a second `serveStatic`, whose `path` option is resolved relative to the
-     * working directory and silently matches nothing when handed the absolute root used above.
-     *
-     * `/api` is excluded so an unmatched API route still answers as one. Returning the app's HTML to
-     * a fetch that expected JSON is the failure that gets read as "the API returned HTML".
-     */
-    app.get("*", async (context) => {
-      if (context.req.path.startsWith("/api")) return context.notFound();
-      const index = Bun.file(`${root}/index.html`);
-      if (!(await index.exists())) return context.notFound();
-      return new Response(index, {
-        headers: { "content-type": "text/html; charset=utf-8" },
-      });
-    });
-  }
+  if (config.appDistDir) mountBuiltApp(app, config.appDistDir);
 
   return app;
 }
