@@ -29,6 +29,8 @@ COPY worker/package.json worker/package.json
 COPY shared/package.json shared/package.json
 COPY toolkit/package.json toolkit/package.json
 COPY extension/package.json extension/package.json
+# Optional npm mirror for hosts that reach the default registry slowly. The lockfile's hashes still check every package.
+ARG BUN_CONFIG_REGISTRY
 RUN bun install --frozen-lockfile
 
 
