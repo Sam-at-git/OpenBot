@@ -240,7 +240,9 @@ export function createWorkspace(
           realPath,
           fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW,
         ).catch(() => {
-          throw new WorkspacePathError(`${path} could not be opened as a file.`);
+          throw new WorkspacePathError(
+            `${path} could not be opened as a file.`,
+          );
         });
         try {
           const info = await handle.stat();
