@@ -714,11 +714,16 @@ export function createSignInService(deps: SignInServiceDependencies) {
           "The person signed in by hand. Take a fresh snapshot before acting on the page.",
         resolvedAt: new Date(),
       });
-      if (!done)
+      if (!done) {
+        // Handing the browser back already finished it (`handedBack`); the form's button is then a no-op.
+        const current = await store.request(owner, id);
+        if (current?.status === "signed_in" && current.method === "takeover")
+          return view(current);
         throw new SignInRefusedError(
           "Take over the browser before finishing.",
           409,
         );
+      }
       await audit("computer.sign_in_completed", actor, "computer", done.botId, {
         bot: done.botId,
         request: id,
@@ -726,6 +731,60 @@ export function createSignInService(deps: SignInServiceDependencies) {
         method: "takeover",
       });
       await resolved(done);
+      return view(done);
+    },
+
+    /**
+     * A person held this Bot's browser and handed it back, so the sign-in the Bot is waiting on has had its answer.
+     *
+     * They may have used the Bot's screen and never opened the private form, which left the turn waiting for a form
+     * nobody was going to fill in. Only the newest open request is answered, and only one that has not expired. Whether
+     * the login worked is not known here, so the Bot is told to look.
+     */
+    async handedBack(owner: string, botId: string, actor: ActionActor) {
+      const [request] = (await store.pendingRequests(owner))
+        .filter((candidate) => candidate.botId === botId)
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      if (!request) return null;
+      const done = await store.transition(owner, request.id, OPEN, {
+        status: "signed_in",
+        method: "takeover",
+        outcome:
+          "The person used the browser and handed it back. Take a fresh snapshot and check that you are signed in before going on.",
+        resolvedAt: new Date(),
+      });
+      if (!done) return null;
+      await audit("computer.sign_in_completed", actor, "computer", done.botId, {
+        bot: done.botId,
+        request: done.id,
+        site: done.origin,
+        method: "takeover",
+      });
+      await resolved(done);
+      return done;
+    },
+
+    /**
+     * The person sent a new message instead of answering, so the paused turn is over.
+     *
+     * Closed WITHOUT `resolved`: continuing the old turn as well would put two turns in one conversation. Already
+     * closed is fine, and read directly because `load` would resume an expired request's turn on the way past.
+     */
+    async withdraw(owner: string, id: string, actor: ActionActor) {
+      const current = await store.request(owner, id);
+      if (!current)
+        throw new SignInRefusedError("There is no such sign-in request.", 404);
+      const done = await store.transition(owner, id, OPEN, {
+        status: "cancelled",
+        outcome: `The person moved on without signing in to ${current.origin}. Do not ask for the login another way.`,
+        resolvedAt: new Date(),
+      });
+      if (!done) return view(current);
+      await audit("computer.sign_in_cancelled", actor, "computer", done.botId, {
+        bot: done.botId,
+        request: id,
+        site: done.origin,
+      });
       return view(done);
     },
 

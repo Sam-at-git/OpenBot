@@ -1462,6 +1462,14 @@ export function createApp(
                 : {}),
             })
           : undefined,
+        coworker?.passwords
+          ? async (seat, actor) =>
+              coworker.passwords?.handedBack(
+                actor.userId ?? actor.id,
+                seat.botId,
+                actor,
+              )
+          : undefined,
       ),
     );
   }

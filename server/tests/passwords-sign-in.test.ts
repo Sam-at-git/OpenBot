@@ -364,6 +364,66 @@ describe("the other answers", () => {
     expect(resolved).toHaveLength(1);
   });
 
+  test("handing the browser back answers the open request and continues the turn", async () => {
+    const { service, resolved } = setup();
+    const request = await service.request({
+      ownerUserId: "owner",
+      botId: "bot",
+      site: "example.com",
+      actor,
+    });
+    const done = await service.handedBack("owner", "bot", actor);
+    expect(done?.id).toBe(request.id);
+    expect(done?.status).toBe("signed_in");
+    expect(done?.outcome).toContain("check that you are signed in");
+    expect(resolved).toHaveLength(1);
+    expect(await service.handedBack("owner", "bot", actor)).toBeNull();
+    expect(resolved).toHaveLength(1);
+  });
+
+  test("handing back leaves another Bot's request alone", async () => {
+    const { service, resolved } = setup();
+    await service.request({
+      ownerUserId: "owner",
+      botId: "other",
+      site: "example.com",
+      actor,
+    });
+    expect(await service.handedBack("owner", "bot", actor)).toBeNull();
+    expect(resolved).toHaveLength(0);
+  });
+
+  test("I've signed in after handing back is a no-op", async () => {
+    const { service, resolved } = setup();
+    const request = await service.request({
+      ownerUserId: "owner",
+      botId: "bot",
+      site: "example.com",
+      actor,
+    });
+    await service.takeOver("owner", request.id, actor);
+    await service.handedBack("owner", "bot", actor);
+    const again = await service.finishTakeover("owner", request.id, actor);
+    expect(again.status).toBe("signed_in");
+    expect(resolved).toHaveLength(1);
+  });
+
+  test("a new message withdraws it without continuing the old turn", async () => {
+    const { service, resolved } = setup();
+    const request = await service.request({
+      ownerUserId: "owner",
+      botId: "bot",
+      site: "example.com",
+      actor,
+    });
+    const closed = await service.withdraw("owner", request.id, actor);
+    expect(closed.status).toBe("cancelled");
+    expect(resolved).toHaveLength(0);
+    expect((await service.withdraw("owner", request.id, actor)).status).toBe(
+      "cancelled",
+    );
+  });
+
   test("declining closes it, and the Bot is told not to ask another way", async () => {
     const { service, resolved } = setup();
     const request = await service.request({

@@ -85,6 +85,8 @@ export function createComputerRoutes(
    * `/:botId/browser`. Absent where this OpenBot has no Recorder: nothing about it is mounted.
    */
   botBrowser?: BotBrowser,
+  /** A person handed this Bot's browser back after holding it: answers a sign-in the Bot is waiting on. */
+  onHandedBack?: (seat: ComputerSeat, actor: ActionActor) => Promise<unknown>,
 ) {
   const routes = new Hono<{ Variables: AppVariables }>();
 
@@ -605,15 +607,35 @@ export function createComputerRoutes(
    */
   routes.post("/:botId/control/release", (context) =>
     act(context, gateway.seatFor, async (seat, actor, body) => {
+      const requestId = handoffId(body);
       let state: Awaited<ReturnType<typeof gateway.releaseControl>>;
       try {
-        state = await gateway.releaseControl(seat, actor, handoffId(body));
+        state = await gateway.releaseControl(seat, actor, requestId);
       } catch (error) {
         // The computer may have handed it back though its answer never came (a timeout): what it says now decides.
         await botBrowser?.wheelMayHaveReturned(seat);
         throw error;
       }
       await botBrowser?.wheelReturned(seat);
+      // Not awaited: this can carry a whole Bot turn, and the person's Hand back button must answer now. Read by id,
+      // because the state above no longer names a finished request, and a cancelled one is not a handback.
+      if (onHandedBack)
+        void gateway
+          .control(seat, requestId)
+          .then((after) =>
+            after.request?.status === "completed"
+              ? onHandedBack(seat, actor)
+              : undefined,
+          )
+          .catch((error: unknown) =>
+            console.error(
+              JSON.stringify({
+                type: "handback-sign-in-failed",
+                botId: seat.botId,
+                error: error instanceof Error ? error.name : "unknown",
+              }),
+            ),
+          );
       return state;
     }),
   );

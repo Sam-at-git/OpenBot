@@ -77,6 +77,11 @@ export function finishSignInMutationOptions(queryClient: QueryClient) {
   });
 }
 
+/** Closes a request the person moved on from, without continuing the turn that was waiting on it. */
+export function withdrawSignIn(id: string) {
+  return post(id, "withdraw");
+}
+
 export function cancelSignInMutationOptions(queryClient: QueryClient) {
   return mutationOptions({
     mutationFn: (id: string) => post(id, "cancel"),

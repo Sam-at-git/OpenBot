@@ -178,6 +178,17 @@ export function createSignInRoutes(
     ),
   );
 
+  /** The person sent a new message instead: closes the request without continuing the paused turn. */
+  routes.post("/:id/withdraw", async (context) =>
+    context.json(
+      await service.withdraw(
+        context.var.actor.id,
+        context.req.param("id"),
+        actorOf(context),
+      ),
+    ),
+  );
+
   return routes;
 }
 

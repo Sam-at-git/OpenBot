@@ -37,12 +37,14 @@ import {
 } from "@/lib/channels/turns-finished-away";
 import { useActiveBot } from "@/lib/copilot/active-bot";
 import { observeApprovalAgent } from "@/lib/copilot/approval-context";
+import { clearComputerWaits } from "@/lib/copilot/computer-waits";
 import { ConversationProvider } from "@/lib/copilot/conversation";
 import { afterMs, joinWithin } from "@/lib/copilot/join-thread";
 import { repairUnansweredToolCalls } from "@/lib/copilot/repair-history";
 import { refusedAsBusy, stoppedReason } from "@/lib/copilot/stopped-turn";
 import { readThreadPage } from "@/lib/copilot/thread-messages";
 import { TurnUsageProvider, useTurnUsage } from "@/lib/copilot/turn-usage";
+import { withdrawSignIn } from "@/lib/passwords/mutations";
 import { useSkillCommands } from "@/lib/plugins/skill-commands";
 import {
   askChannelAgent,
@@ -914,6 +916,8 @@ export function ChannelChat({
       })
       .finally(() => clearTimeout(voiceHistoryTimer));
     const target = agentRef.current;
+    // Before anything is added, so a failure here leaves the transcript alone and the words back in the box.
+    await clearComputerWaits(target, withdrawSignIn);
     const existingMessageIds = new Set(
       target.messages.map((message) => message.id),
     );
