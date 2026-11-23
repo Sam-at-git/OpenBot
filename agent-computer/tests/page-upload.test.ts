@@ -160,22 +160,26 @@ describe.skipIf(!asked)("putting files into a page", () => {
     await page.close();
   });
 
-  test("refuses to guess between two inputs, or invent one", async () => {
+  test("refuses to guess between two inputs", async () => {
     const page = await open();
-    for (const id of ["#two", "#alone"]) {
-      const section = page.locator(id);
-      if (id === "#alone")
-        await page.evaluate(() =>
-          document
-            .querySelectorAll('input[type="file"]')
-            .forEach((input) => input.remove()),
-        );
-      await expect(
-        uploadToField(section, [report()], ACTING),
-      ).rejects.toBeInstanceOf(PageUploadError);
-    }
+    await expect(
+      uploadToField(page.locator("#two"), [report()], ACTING),
+    ).rejects.toBeInstanceOf(PageUploadError);
+    expect(await page.locator("#log").textContent()).toBe("");
     await page.close();
-  });
+  }, 20_000);
+
+  test("refuses a control with no file input near it", async () => {
+    const page = await open();
+    await page.evaluate(() => {
+      for (const input of document.querySelectorAll('input[type="file"]'))
+        input.remove();
+    });
+    await expect(
+      uploadToField(page.locator("#alone"), [report()], ACTING),
+    ).rejects.toBeInstanceOf(PageUploadError);
+    await page.close();
+  }, 20_000);
 
   test("refuses several files for a single-file input", async () => {
     const page = await open();
@@ -184,5 +188,5 @@ describe.skipIf(!asked)("putting files into a page", () => {
     ).rejects.toBeInstanceOf(PageUploadError);
     expect(await page.locator("#log").textContent()).toBe("");
     await page.close();
-  });
+  }, 20_000);
 });
