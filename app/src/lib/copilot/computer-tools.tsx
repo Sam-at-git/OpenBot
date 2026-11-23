@@ -400,9 +400,7 @@ export function ComputerTools() {
     description:
       "Put files from your workspace into a file upload field on the page, without opening a file dialog. Give the ref of the file input, or of the visible upload button beside it, from your latest snapshot, its snapshotId, and paths relative to your workspace such as EmployeeMaterials/report.pdf. Do not click the upload button first. The page's change event fires as usual; if it has a separate submit button, click that afterwards, then check the page.",
     parameters: z.object({
-      ref: z
-        .string()
-        .describe("Ref of the file input or its upload button"),
+      ref: z.string().describe("Ref of the file input or its upload button"),
       snapshotId: z.number().describe("The snapshotId that ref came from"),
       paths: z
         .array(z.string())

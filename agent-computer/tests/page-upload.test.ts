@@ -55,7 +55,8 @@ describe("which workspace files may be uploaded", () => {
     const [file] = await files().uploadable(["EmployeeMaterials/体检报告.pdf"]);
     expect(file?.name).toBe("体检报告.pdf");
     expect(file?.bytes).toBe(6);
-    expect(file?.realPath.endsWith("EmployeeMaterials/体检报告.pdf")).toBe(true);
+    expect(file?.mimeType).toBe("application/pdf");
+    expect(file?.buffer.toString()).toBe("report");
   });
 
   test.each([
@@ -122,8 +123,13 @@ describe.skipIf(!asked)("putting files into a page", () => {
     await page.setContent(PAGE);
     return page;
   }
-  const report = () => join(root, "EmployeeMaterials", "体检报告.pdf");
-  const second = () => join(root, "second.pdf");
+  const payload = (name: string, text: string) => ({
+    name,
+    mimeType: "application/pdf",
+    buffer: Buffer.from(text),
+  });
+  const report = () => payload("体检报告.pdf", "report");
+  const second = () => payload("second.pdf", "second");
 
   test("into a visible input, firing change, with no file dialog", async () => {
     const page = await open();

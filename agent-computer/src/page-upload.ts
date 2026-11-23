@@ -63,13 +63,16 @@ export async function fileInputFor(
 /** Sets the files through the browser's automation protocol, so no file dialog opens and `change` fires as usual. */
 export async function uploadToField(
   field: Locator,
-  paths: string[],
+  files: { name: string; mimeType: string; buffer: Buffer }[],
   acting: { timeout: number },
 ): Promise<void> {
   const input = await fileInputFor(field);
-  if (paths.length > 1 && !(await input.evaluate((node) => node.multiple)))
+  if (files.length > 1 && !(await input.evaluate((node) => node.multiple)))
     throw new PageUploadError(
       "This upload field takes one file. Upload them one at a time if the page allows it.",
     );
-  await input.setInputFiles(paths, { timeout: acting.timeout });
+  await input.setInputFiles(
+    files.map(({ name, mimeType, buffer }) => ({ name, mimeType, buffer })),
+    { timeout: acting.timeout },
+  );
 }

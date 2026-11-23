@@ -1170,6 +1170,21 @@ describe("the computer gateway", () => {
     const SHIPPED_NEVER_SUBMIT =
       '(intent == "activate" && contains(element.name, "submit")) || ((tool.name == "computer_key" || tool.name == "computer_type") && key == "Enter")';
 
+    test("an upload is refused when a rule covers any of its files, not only the first", async () => {
+      const denied = await gatewayWith({
+        ...PERMISSIVE,
+        deny: ['intent == "upload_file" && file.extension == "env"'],
+      });
+      await expect(
+        denied.gateway.uploadToPage(botSeat("bot-1"), ACTOR, {
+          ref: "e1",
+          snapshotId: 7,
+          paths: ["report.pdf", "secrets.env"],
+        }),
+      ).rejects.toThrow();
+      expect(denied.calls).toEqual([]);
+    });
+
     test("the shipped preset closes the button, the keypress and the submit flag", async () => {
       const shipped = { ...PERMISSIVE, deny: [SHIPPED_NEVER_SUBMIT] };
 

@@ -21,9 +21,11 @@
  * A factory taking its root as an argument rather than reading the environment, so the confinement
  * can be tested against a temporary directory instead of being taken on trust.
  */
+import { constants as fsConstants } from "node:fs";
 import {
   lstat,
   mkdir,
+  open,
   readdir,
   readFile,
   readlink,
@@ -101,6 +103,9 @@ export const DEFAULT_WORKSPACE_LIMITS: WorkspaceLimits = {
   downloadBytes: 100 * 1024 * 1024,
   folderEntries: 10_000,
 };
+
+/** Most bytes one upload into a page may carry: Playwright's limit for files handed over as data. */
+export const PAGE_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 export function createWorkspace(
   rootPath: string,
@@ -207,11 +212,22 @@ export function createWorkspace(
      * Stricter than a read: the path must already be the file's real path within the workspace, so no link and no `./`.
      * A policy rule and the audit row both see the path as the Bot wrote it, and for bytes leaving the computer that
      * has to be the file that actually goes.
+     *
+     * The bytes are read here, through a handle that refuses a link, rather than the path being given to Chromium. In
+     * this container's locale Chromium silently drops a file whose name is not ASCII (体检报告.pdf never reached the
+     * page), and what is read is what was checked.
      */
-    async uploadable(
-      requested: readonly string[],
-    ): Promise<{ path: string; name: string; bytes: number; realPath: string }[]> {
+    async uploadable(requested: readonly string[]): Promise<
+      {
+        path: string;
+        name: string;
+        bytes: number;
+        mimeType: string;
+        buffer: Buffer;
+      }[]
+    > {
       const root = await realpath(rootPath);
+      const most = Math.min(limits.downloadBytes, PAGE_UPLOAD_BYTES);
       const files = [];
       let total = 0;
       for (const path of requested) {
@@ -220,20 +236,34 @@ export function createWorkspace(
           throw new WorkspacePathError(
             `${path} is a link or not written as the file's own path. Name the file itself, relative to your workspace.`,
           );
-        const info = await stat(realPath);
-        if (!info.isFile())
-          throw new WorkspaceFileError(`${path} is not a file.`);
-        total += info.size;
-        if (total > limits.downloadBytes)
-          throw new WorkspaceFileTooLargeError(
-            `These files are too large to upload together: the limit is ${limits.downloadBytes} bytes.`,
-          );
-        files.push({
-          path,
-          name: basename(realPath),
-          bytes: info.size,
+        const handle = await open(
           realPath,
+          fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW,
+        ).catch(() => {
+          throw new WorkspacePathError(`${path} could not be opened as a file.`);
         });
+        try {
+          const info = await handle.stat();
+          if (!info.isFile())
+            throw new WorkspaceFileError(`${path} is not a file.`);
+          total += info.size;
+          if (total > most)
+            throw new WorkspaceFileTooLargeError(
+              `These files are too large to upload together: the limit is ${most} bytes.`,
+            );
+          const buffer = await handle.readFile();
+          files.push({
+            path,
+            name: basename(realPath),
+            bytes: buffer.length,
+            mimeType:
+              Bun.file(realPath).type.split(";")[0] ||
+              "application/octet-stream",
+            buffer,
+          });
+        } finally {
+          await handle.close();
+        }
       }
       return files;
     },

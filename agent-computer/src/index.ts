@@ -35,12 +35,12 @@ import {
 import { handleEgressPolicyRequest, startEgressFilter } from "./egress";
 import { enterText, FieldValueError } from "./enter-text";
 import { identity } from "./identity";
-import { PageUploadError, pageUploadPaths, uploadToField } from "./page-upload";
 import {
   assertPageAccess,
   navigateWebPage,
   type PagePurpose,
 } from "./navigation";
+import { PageUploadError, pageUploadPaths, uploadToField } from "./page-upload";
 import {
   computerOwner,
   NOT_ITS_OWN_COMPUTER_RECORD,
@@ -1993,7 +1993,7 @@ async function performAction(
     const chosen = await files.uploadable(pageUploadPaths(body.paths));
     await uploadToField(
       await resolveRef(session, target, ref, expected),
-      chosen.map((file) => file.realPath),
+      chosen,
       acting,
     );
     return {
