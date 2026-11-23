@@ -10,10 +10,11 @@ const INDEX_CACHE_CONTROL = "no-cache";
  * A file under `/assets` that is not there is a 404, never the app's HTML: a tab left open across a deploy asks for the
  * old build's chunks, and HTML with a 200 reaches it as a module that cannot be loaded.
  */
-export function mountBuiltApp<E extends Env, S extends Schema, B extends string>(
-  app: Hono<E, S, B>,
-  root: string,
-) {
+export function mountBuiltApp<
+  E extends Env,
+  S extends Schema,
+  B extends string,
+>(app: Hono<E, S, B>, root: string) {
   app.use(
     "/*",
     serveStatic({

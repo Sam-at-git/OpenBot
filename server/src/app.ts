@@ -57,6 +57,7 @@ import {
   browserConnectionRevoked,
   createBrowserRoutes,
 } from "./browser/routes";
+import { mountBuiltApp } from "./built-app";
 import {
   createAttachmentRoutes,
   createChannelAttachmentRoutes,
@@ -74,7 +75,6 @@ import type { ComponentStore } from "./components/store";
 import type { ComputerGateway } from "./computer/gateway";
 import type { PageFrameStore } from "./computer/page-frames";
 import type { PolicyStore } from "./computer/policy-store";
-import { mountBuiltApp } from "./built-app";
 import { createComputerRoutes } from "./computer/routes";
 import {
   type ComputerSecretStore,

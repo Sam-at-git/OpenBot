@@ -13,8 +13,10 @@ function memory() {
   };
 }
 
-const serves = (body: string, status = 200) => async () =>
-  new Response(body, { status });
+const serves =
+  (body: string, status = 200) =>
+  async () =>
+    new Response(body, { status });
 
 describe("a chunk that failed to load", () => {
   test("reloads once when the server has a new build", async () => {

@@ -52,8 +52,10 @@ export function reloadOnStaleBuild() {
         checking = false;
         return;
       }
-      const reload = await shouldReloadForNewBuild(entry, storage, (url, init) =>
-        fetch(url, init),
+      const reload = await shouldReloadForNewBuild(
+        entry,
+        storage,
+        (url, init) => fetch(url, init),
       );
       checking = false;
       if (reload) window.location.reload();
